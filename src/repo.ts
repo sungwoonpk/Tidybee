@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { git } from "./gitrun.js";
 
 /** What Tidybee knows about the files in a repository. Paths are relative to the root and use forward slashes. */
 export interface RepoIndex {
@@ -42,19 +42,6 @@ const SKIPPED_DIRS = new Set([
 
 const MAX_FILES = 200_000;
 
-function git(root: string, args: string[]): string | null {
-  try {
-    return execFileSync("git", ["-C", root, ...args], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      maxBuffer: 256 * 1024 * 1024,
-      timeout: 30_000,
-    });
-  } catch {
-    return null;
-  }
-}
-
 function listWithGit(root: string): string[] | null {
   // Tracked files and files that are not ignored but not yet added, minus any deleted from disk but still in the index.
   const all = git(root, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"]);
@@ -66,18 +53,9 @@ function listWithGit(root: string): string[] | null {
 /** Asks Git which of the paths a .gitignore rule covers, such as build output and local settings files. */
 function ignoredBy(root: string, paths: string[]): Set<string> {
   if (paths.length === 0) return new Set();
-  try {
-    const out = execFileSync("git", ["-C", root, "check-ignore", "--stdin", "-z"], {
-      encoding: "utf8",
-      input: paths.join("\0"),
-      stdio: ["pipe", "pipe", "ignore"],
-      timeout: 30_000,
-    });
-    return new Set(out.split("\0").filter(Boolean));
-  } catch {
-    // "git check-ignore" exits with 1 when none of the paths are ignored. Any other failure means Git cannot say.
-    return new Set();
-  }
+  // "git check-ignore" exits with 1 when none of the paths are ignored, which comes back here as null, as does any failure.
+  const out = git(root, ["check-ignore", "--stdin", "-z"], { input: paths.join("\0") });
+  return new Set((out ?? "").split("\0").filter(Boolean));
 }
 
 function walk(root: string): string[] {

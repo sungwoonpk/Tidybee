@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { git } from "./gitrun.js";
 
 /** What Git remembers about a path that is no longer there. */
 export interface Evidence {
@@ -21,26 +21,16 @@ export const NO_HISTORY: History = { lookup: () => undefined, lookupName: () => 
 
 /** Reads the deletions and renames in the recent history of a repository. Returns an empty history when Git is not available. */
 export function loadHistory(root: string, maxCommits = 5000): History {
-  let out: string;
-  try {
-    out = execFileSync(
-      "git",
-      [
-        "-C",
-        root,
-        "log",
-        "--name-status",
-        "-M",
-        "--diff-filter=DR",
-        "--relative",
-        `--max-count=${maxCommits}`,
-        "--format=%x01%h%x09%cs",
-      ],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024, timeout: 30_000 },
-    );
-  } catch {
-    return NO_HISTORY;
-  }
+  const out = git(root, [
+    "log",
+    "--name-status",
+    "-M",
+    "--diff-filter=DR",
+    "--relative",
+    `--max-count=${maxCommits}`,
+    "--format=%x01%h%x09%cs",
+  ]);
+  if (out === null) return NO_HISTORY;
 
   // The log lists the newest commit first, so the first time a path appears is the latest thing that happened to it.
   const events = new Map<string, Evidence>();
