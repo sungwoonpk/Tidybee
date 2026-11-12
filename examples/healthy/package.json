@@ -1,0 +1,8 @@
+{
+  "name": "parser-example",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test"
+  }
+}
