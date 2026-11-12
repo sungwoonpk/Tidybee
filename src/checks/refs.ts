@@ -361,7 +361,8 @@ export function staleImports(ctx: Context): Finding[] {
         });
         continue;
       }
-      if (stack.length >= MAX_IMPORT_DEPTH) {
+      if (stack.length > MAX_IMPORT_DEPTH) {
+        // the stack holds the file itself, so this is the sixth hop
         report({
           ...base,
           rule: "import-depth",
