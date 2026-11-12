@@ -17,6 +17,8 @@ export interface RepoIndex {
   /** True when the first part of the path is a file or folder at the top of the repository. */
   hasTopLevel(segment: string): boolean;
   read(path: string): string;
+  /** Which of these paths Git would ignore. Empty when Git was not used. */
+  ignored(paths: string[]): Set<string>;
 }
 
 const SKIPPED_DIRS = new Set([
@@ -59,6 +61,23 @@ function listWithGit(root: string): string[] | null {
   if (all === null) return null;
   const deleted = new Set((git(root, ["ls-files", "--deleted", "-z"]) ?? "").split("\0").filter(Boolean));
   return all.split("\0").filter((f) => f !== "" && !deleted.has(f));
+}
+
+/** Asks Git which of the paths a .gitignore rule covers, such as build output and local settings files. */
+function ignoredBy(root: string, paths: string[]): Set<string> {
+  if (paths.length === 0) return new Set();
+  try {
+    const out = execFileSync("git", ["-C", root, "check-ignore", "--stdin", "-z"], {
+      encoding: "utf8",
+      input: paths.join("\0"),
+      stdio: ["pipe", "pipe", "ignore"],
+      timeout: 30_000,
+    });
+    return new Set(out.split("\0").filter(Boolean));
+  } catch {
+    // "git check-ignore" exits with 1 when none of the paths are ignored. Any other failure means Git cannot say.
+    return new Set();
+  }
 }
 
 function walk(root: string): string[] {
@@ -114,5 +133,6 @@ export function indexRepo(root: string, options: { useGit?: boolean } = {}): Rep
     byBasename: (name) => basenames.get(name) ?? [],
     hasTopLevel: (s) => top.has(s),
     read: (p) => readFileSync(join(root, p), "utf8"),
+    ignored: (paths) => (usedGit ? ignoredBy(root, paths) : new Set()),
   };
 }

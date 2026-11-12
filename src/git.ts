@@ -13,9 +13,11 @@ export interface Evidence {
 export interface History {
   /** Evidence for a path or a folder that is gone, or undefined when Git says nothing about it. */
   lookup(path: string): Evidence | undefined;
+  /** Evidence for a file known only by its name, wherever it used to be. */
+  lookupName(name: string): (Evidence & { path: string }) | undefined;
 }
 
-const NONE: History = { lookup: () => undefined };
+export const NO_HISTORY: History = { lookup: () => undefined, lookupName: () => undefined };
 
 /** Reads the deletions and renames in the recent history of a repository. Returns an empty history when Git is not available. */
 export function loadHistory(root: string, maxCommits = 5000): History {
@@ -37,7 +39,7 @@ export function loadHistory(root: string, maxCommits = 5000): History {
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024, timeout: 30_000 },
     );
   } catch {
-    return NONE;
+    return NO_HISTORY;
   }
 
   // The log lists the newest commit first, so the first time a path appears is the latest thing that happened to it.
@@ -59,6 +61,12 @@ export function loadHistory(root: string, maxCommits = 5000): History {
   }
 
   return {
+    lookupName(name) {
+      for (const [old, ev] of events) {
+        if (old === name || old.endsWith(`/${name}`)) return { ...ev, path: old };
+      }
+      return undefined;
+    },
     lookup(path) {
       const exact = events.get(path);
       if (exact) return exact;
