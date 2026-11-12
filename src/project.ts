@@ -53,7 +53,8 @@ export function makeTargetsOf(text: string): string[] {
 export function justRecipesOf(text: string): string[] {
   const out: string[] = [];
   for (const line of text.split("\n")) {
-    const m = /^@?([A-Za-z_][A-Za-z0-9_-]*)(?:\s+[^:=\n]*)?:(?!=)/.exec(line);
+    // A recipe may have parameters, and a parameter may have a default with "=". A line with ":=" sets a variable.
+    const m = /^@?([A-Za-z_][A-Za-z0-9_-]*)(?:\s+[^:\n]*)?:(?!=)/.exec(line);
     if (m) out.push(m[1] as string);
   }
   return out;
