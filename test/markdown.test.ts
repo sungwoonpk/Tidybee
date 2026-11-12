@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseFrontmatter, parseMarkdown, slugify } from "../src/markdown.ts";
+import { parseFrontmatter, parseMarkdown, slugify } from "../src/markdown.js";
 
 test("headings, with their level, line and the anchor GitHub makes", () => {
   const md = parseMarkdown("# Title\n\ntext\n\n## Build & Test (fast)\n### `npm run x`\n");
