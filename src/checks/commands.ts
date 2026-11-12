@@ -99,6 +99,14 @@ export function staleCommands(ctx: Context): Finding[] {
   const { project } = ctx;
   for (const doc of ctx.docs) {
     const seen = new Set<string>();
+    const mismatches = new Map<
+      string,
+      {
+        manager: Manager;
+        first: Pick<Finding, "file" | "line" | "column" | "subject" | "confidence"> & { others: number[] };
+        others: number[];
+      }
+    >();
     for (const cmd of commandsOf(doc)) {
       const [program = "", ...args] = cmd.tokens;
       const subject = cmd.tokens.join(" ");
@@ -121,13 +129,11 @@ export function staleCommands(ctx: Context): Finding[] {
         const manager = project.managerFor(doc.file.dir);
         const word = args.find((a) => !a.startsWith("-"));
         if (!global && manager && manager !== runner && word && INSTALL_WORDS.has(word)) {
-          add({
-            rule: "package-manager",
-            severity: "warning",
-            message: `Uses ${runner}, but this repository's lockfile is ${manager}'s.`,
-            suggestion: `Use ${manager}.`,
-          });
-          continue;
+          // One finding for each package manager in a file, at the first place it is used, since the same advice on
+          // every line would only be noise. The other lines are named in the message.
+          const found = mismatches.get(runner);
+          if (found) found.others.push(cmd.line);
+          else mismatches.set(runner, { manager, first: { ...base, confidence, others: [] }, others: [] });
         }
         const s = scriptOf(runner, args);
         if (!s || global) continue;
@@ -170,6 +176,16 @@ export function staleCommands(ctx: Context): Finding[] {
           });
         }
       }
+    }
+    for (const [runner, m] of mismatches) {
+      const more = m.others.filter((l) => l !== m.first.line);
+      findings.push({
+        ...m.first,
+        rule: "package-manager",
+        severity: "warning",
+        message: `Uses ${runner}, but this repository's lockfile is ${m.manager}'s.${more.length > 0 ? ` The same on line${more.length > 1 ? "s" : ""} ${more.join(", ")}.` : ""}`,
+        suggestion: `Use ${m.manager}.`,
+      });
     }
   }
   return findings;

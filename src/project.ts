@@ -42,7 +42,7 @@ function dirName(path: string): string {
 export function makeTargetsOf(text: string): string[] {
   const out: string[] = [];
   for (const line of text.split("\n")) {
-    const m = /^([A-Za-z0-9_][A-Za-z0-9_.\/-]*(?:\s+[A-Za-z0-9_][A-Za-z0-9_.\/-]*)*)\s*:(?![=:])/.exec(line);
+    const m = /^([A-Za-z0-9_][A-Za-z0-9_./-]*(?:\s+[A-Za-z0-9_][A-Za-z0-9_./-]*)*)\s*:(?![=:])/.exec(line);
     if (!m) continue;
     for (const name of (m[1] as string).split(/\s+/)) if (!name.includes("%")) out.push(name);
   }

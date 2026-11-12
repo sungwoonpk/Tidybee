@@ -299,7 +299,7 @@ export function staleLinks(ctx: Context): Finding[] {
         rule: "stale-link",
         severity: "error",
         confidence: "high",
-        message: `The link \`${t}\` points at \`${target}\`, which does not exist.${evidence ? ` ${describe(evidence)}` : ""}`,
+        message: `The link \`${t}\` points at ${target === pathPart ? "a file" : `\`${target}\``} that does not exist.${evidence ? ` ${describe(evidence)}` : ""}`,
         ...(evidence?.kind === "renamed" && evidence.to ? { suggestion: `Point at \`${evidence.to}\` instead.` } : {}),
       });
     }
@@ -346,7 +346,7 @@ export function staleImports(ctx: Context): Finding[] {
           rule: "stale-import",
           severity: "error",
           confidence: "high",
-          message: `\`@${imp.target}\` imports \`${target}\`, which does not exist.${evidence ? ` ${describe(evidence)}` : ""}`,
+          message: `\`@${imp.target}\` imports ${target === imp.target ? "a file" : `\`${target}\``} that does not exist.${evidence ? ` ${describe(evidence)}` : ""}`,
           ...(evidence?.kind === "renamed" && evidence.to ? { suggestion: `Import \`${evidence.to}\` instead.` } : {}),
         });
         continue;

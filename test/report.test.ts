@@ -12,6 +12,8 @@ const base: Report = {
   counts: { error: 0, warning: 0, info: 0 },
   hidden: 0,
 };
+// The escape character that starts a terminal color code.
+const ESC = String.fromCharCode(27);
 const plain = { color: false, showHiddenHint: true };
 
 test("no instruction files: says what Tidybee looks for", () => {
@@ -112,9 +114,9 @@ test("color is added only when asked for, and plain output has no escape codes",
     ],
     counts: { error: 1, warning: 0, info: 0 },
   };
-  assert.doesNotMatch(renderText(r, plain), /\x1b\[/);
-  assert.match(renderText(r, { color: true, showHiddenHint: true }), /\x1b\[31merror/);
-  assert.match(renderText(base, { color: true, showHiddenHint: true }), /\x1b\[32mNo problems found\x1b\[0m/);
+  assert.ok(!renderText(r, plain).includes(ESC), "plain output has no color codes");
+  assert.ok(renderText(r, { color: true, showHiddenHint: true }).includes(`${ESC}[31merror`));
+  assert.ok(renderText(base, { color: true, showHiddenHint: true }).includes(`${ESC}[32mNo problems found${ESC}[0m`));
 });
 
 test("JSON carries a version and the whole report", () => {

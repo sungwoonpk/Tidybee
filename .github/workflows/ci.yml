@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, types and tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      # The tests make their own Git repositories, and some read history, so the whole of it is fetched.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      # Fails if line, function or branch coverage falls under the thresholds in package.json.
+      - run: npm run test:coverage
+
+  build:
+    name: Build and run the compiled command
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: The compiled command runs, finds the problems in the broken example and passes the healthy one
+        run: |
+          node dist/src/cli.js --version
+          node dist/src/cli.js check examples/healthy
+          set +e
+          node dist/src/cli.js check examples/broken > broken.txt
+          code=$?
+          set -e
+          cat broken.txt
+          [ "$code" = "1" ]
+          grep -q "src/old-parser.ts" broken.txt
+          grep -q "npm run lint" broken.txt
+          grep -q "docs/guide.md" broken.txt
+          grep -q "docs/rules.md" broken.txt
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Tidybee ships with no runtime dependencies. This is the check that keeps it that way.
+      - run: npm audit --omit=dev --audit-level=low
+      # Development tools may carry moderate advisories. High and critical ones fail the build.
+      - run: npm audit --audit-level=high

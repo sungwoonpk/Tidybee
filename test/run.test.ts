@@ -3,6 +3,9 @@ import { test } from "node:test";
 import { type IO, run } from "../src/run.js";
 import { makeRepo } from "./helpers.js";
 
+// The escape character that starts a terminal color code.
+const ESC = String.fromCharCode(27);
+
 function io(cwd: string, extra: Partial<IO> = {}): IO & { stdout: string; stderr: string } {
   const state = { stdout: "", stderr: "" };
   return Object.assign(state, {
@@ -25,7 +28,7 @@ test("help and version", (t) => {
   const cwd = makeRepo(t, {});
   const h = io(cwd);
   assert.equal(run(["--help"], h), 0);
-  assert.match(h.stdout, /Usage:\n  tidybee check/);
+  assert.match(h.stdout, /Usage:\n {2}tidybee check/);
   const v = io(cwd);
   assert.equal(run(["-v"], v), 0);
   assert.match(v.stdout, /^tidybee \d+\.\d+\.\d+\n$/);
@@ -100,13 +103,13 @@ test("color only on a terminal, and never when NO_COLOR is set or the terminal i
   const root = makeRepo(t, broken);
   const colored = io(root, { isTTY: true });
   run(["check"], colored);
-  assert.match(colored.stdout, /\x1b\[/);
+  assert.ok(colored.stdout.includes(ESC), "has color codes");
   for (const env of [{ NO_COLOR: "1" }, { TERM: "dumb" }]) {
     const x = io(root, { isTTY: true, env });
     run(["check"], x);
-    assert.doesNotMatch(x.stdout, /\x1b\[/);
+    assert.ok(!x.stdout.includes(ESC), "no color codes");
   }
   const piped = io(root);
   run(["check"], piped);
-  assert.doesNotMatch(piped.stdout, /\x1b\[/);
+  assert.ok(!piped.stdout.includes(ESC), "no color codes");
 });

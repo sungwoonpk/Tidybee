@@ -98,18 +98,32 @@ test("global installs and scoped commands are not checked", (t) => {
   assert.deepEqual(run(root), []);
 });
 
-test("using a package manager the repository does not use is a warning, using the right one is fine", (t) => {
+test("using a package manager the repository does not use is one warning for each, naming the other lines", (t) => {
   const root = makeRepo(t, {
     "package.json": pkg({ build: "x", test: "y" }),
     "pnpm-lock.yaml": "",
     "CLAUDE.md": "```\nnpm install\npnpm install\nnpm run build\nyarn test\nnpx tsc\n```\n",
   });
-  assert.deepEqual(summary(run(root)), [
+  const found = run(root);
+  assert.deepEqual(summary(found), [
     "package-manager/warning/high/npm install",
-    "package-manager/warning/high/npm run build",
     "package-manager/warning/high/yarn test",
   ]);
-  assert.equal(run(root)[0]?.suggestion, "Use pnpm.");
+  assert.equal(found[0]?.message, "Uses npm, but this repository's lockfile is pnpm's. The same on line 4.");
+  assert.equal(found[0]?.suggestion, "Use pnpm.");
+  assert.doesNotMatch(found[1]?.message ?? "", /The same on/);
+});
+
+test("a wrong package manager does not hide a script that is missing", (t) => {
+  const root = makeRepo(t, {
+    "package.json": pkg({ build: "x" }),
+    "pnpm-lock.yaml": "",
+    "CLAUDE.md": "```\nnpm run lint\n```\n",
+  });
+  assert.deepEqual(summary(run(root)).sort(), [
+    "package-manager/warning/high/npm run lint",
+    "stale-command/error/high/npm run lint",
+  ]);
 });
 
 test("with no lockfile there is no manager to disagree with, and the nearest lockfile wins in a monorepo", (t) => {
