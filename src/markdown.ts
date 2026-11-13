@@ -305,7 +305,7 @@ function statementsOf(body: FenceLine[], skip: Set<number>): FenceLine[] {
       .map((p) => p.text.trim())
       .join(" ")
       .replace(/\s+/g, " ");
-    for (const sentence of text.split(/(?<=[.!?])\s+(?=[A-Z0-9`"'(\[])/)) {
+    for (const sentence of text.split(/(?<=[.!?])\s+(?=[A-Z0-9`"'([])/)) {
       if (sentence.trim() !== "") out.push({ text: sentence.trim(), line: (para[0] as FenceLine).line });
     }
     para = [];

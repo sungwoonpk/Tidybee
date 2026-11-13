@@ -45,3 +45,18 @@ test("the broken example breaks every kind of reference, and the healthy example
   ]);
   assert.deepEqual(rules("examples/healthy"), []);
 });
+
+test("the messy example trips the structure and hygiene checks", () => {
+  let out = "";
+  run(["check", "examples/messy", "--format", "json"], {
+    out: (t) => void (out += t),
+    err: () => undefined,
+    cwd: root,
+    isTTY: false,
+    env: {},
+  });
+  const rules = new Set((JSON.parse(out) as { findings: { rule: string }[] }).findings.map((f) => f.rule));
+  for (const rule of ["rule-header", "stale-tree", "drifting-files", "filler", "todo-marker", "empty-section"]) {
+    assert.ok(rules.has(rule), `examples/messy should trip ${rule}, and it tripped ${[...rules].join(", ")}`);
+  }
+});
