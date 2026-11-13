@@ -23,14 +23,14 @@ const BARE_JS = /(config|rc|setup|index|main|app|server|worker)\.[cm]?js$/i;
 
 // Folders that hold build output or local state. A path into one of them is rarely in the repository, and that is no mistake.
 // Words that mark an example path rather than a real one: "path/to/file", "your-app", "foo/bar".
-const PLACEHOLDER = /(^|\/)(path\/to|your[-_][\w.-]*|my[-_][\w.-]*|foo|bar|baz|xxx|example)(\/|\.|$)/i;
+export const PLACEHOLDER = /(^|\/)(path\/to|your[-_][\w.-]*|my[-_][\w.-]*|foo|bar|baz|xxx|example)(\/|\.|$)/i;
 
 // A line that says it writes, creates or installs something is naming a place the tool puts files, often in someone else's
 // repository, and not a file that this one should have.
 const PRODUCES =
   /\b(writes?|writing|creates?|creating|generates?|generating|installs?|installing|drops?|emits?|outputs?|produces?|per-repo)\b/i;
 
-const GENERATED = new Set([
+export const GENERATED = new Set([
   "dist",
   "build",
   "out",
@@ -52,7 +52,7 @@ function dirOf(path: string): string {
   return i < 0 ? "" : path.slice(0, i);
 }
 
-function describe(ev: Evidence): string {
+export function describe(ev: Evidence): string {
   const when = `in ${ev.commit} on ${ev.date}`;
   return ev.kind === "renamed" ? `It was renamed to \`${ev.to}\` ${when}.` : `It was deleted ${when}.`;
 }

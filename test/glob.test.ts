@@ -48,3 +48,16 @@ test("countMatches counts the files any glob matches", () => {
   assert.equal(countMatches(["**/*.ts", "*.md"], ["a.ts", "b/c.ts", "README.md", "x.js"]), 3);
   assert.equal(countMatches(["**/*.py"], ["a.ts"]), 0);
 });
+
+test("braces may be nested, and an alternative with no slash is not matched in any folder", () => {
+  const g = "build/{oss/**,common/x.ts,{win32,linux}/steps/*.yml}";
+  assert.ok(matches(g, "build/oss/a/b.txt"));
+  assert.ok(matches(g, "build/common/x.ts"));
+  assert.ok(matches(g, "build/win32/steps/a.yml"));
+  assert.ok(matches(g, "build/linux/steps/b.yml"));
+  assert.ok(!matches(g, "build/darwin/steps/a.yml"));
+  assert.ok(!matches(g, "other/common/x.ts"));
+  assert.ok(!matches("src/{a,b}.ts", "src/deep/a.ts"));
+  assert.ok(matches("{a,b}.md", "docs/a.md"), "with no slash anywhere, the name matches in any folder");
+  assert.deepEqual(splitGlobs("a/{b,{c,d}},e"), ["a/{b,{c,d}}", "e"]);
+});

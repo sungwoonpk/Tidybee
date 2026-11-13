@@ -14,6 +14,8 @@ export interface RepoIndex {
   caseMatch(path: string): string | undefined;
   /** Files with this name anywhere in the repository. */
   byBasename(name: string): string[];
+  /** Folders with this name anywhere in the repository. */
+  dirsNamed(name: string): string[];
   /** True when the first part of the path is a file or folder at the top of the repository. */
   hasTopLevel(segment: string): boolean;
   read(path: string): string;
@@ -109,6 +111,7 @@ export function indexRepo(root: string, options: { useGit?: boolean } = {}): Rep
       return found !== undefined && found !== p ? found : undefined;
     },
     byBasename: (name) => basenames.get(name) ?? [],
+    dirsNamed: (name) => [...dirs].filter((d) => d === name || d.endsWith(`/${name}`)).sort(),
     hasTopLevel: (s) => top.has(s),
     read: (p) => readFileSync(join(root, p), "utf8"),
     ignored: (paths) => (usedGit ? ignoredBy(root, paths) : new Set()),
