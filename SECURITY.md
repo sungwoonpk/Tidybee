@@ -18,6 +18,7 @@ Tidybee is meant to be run on repositories you did not write, so it is built to 
   settings can otherwise name a program for Git to run. See [decision 0003](docs/decisions/0003-safe-git.md) for what was
   tried and what is not covered.
 - It does not change the repository, including the Git index, and a test checks that.
+- It is built not to hang or use up memory on a crafted file: no regular expression is made from what is read, a glob is matched without one, and files are read up to a size limit. This was tried with lines made to make a reader slow, and the ones that were slow are tests. See [decision 0005](docs/decisions/0005-hostile-input-is-bounded.md).
 - It sends nothing anywhere. It does not use the network.
 - It has **not had an independent security review**, and it reads untrusted Markdown with a small reader of its own.
 

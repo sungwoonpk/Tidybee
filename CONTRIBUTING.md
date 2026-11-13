@@ -30,11 +30,12 @@ npm run check      # lint, format, types, and tests with coverage gates: run thi
 
 1. Write the test first when you fix a bug, and watch it fail for the reason you expect.
 2. **Run a new or changed check on real repositories** before you call it done, and put what you found in the pull request. The tests make small repositories that behave. Real ones are where the false positives are. Every skip rule in [docs/checks.md](docs/checks.md) came from one.
-3. When a check can be wrong, give the finding a lower confidence and not a louder message. See [decision 0002](docs/decisions/0002-confidence-and-evidence.md).
-4. A new or changed check goes in [docs/checks.md](docs/checks.md), with what it leaves alone.
-5. If you change a design decision, write or amend a record in `docs/decisions`. Say what it costs, not only why it is good.
-6. Keep the README true. Check each claim you touch against the code.
-7. Commit small, with a message that says what changed and why. Everything in the repository is written in English.
+3. **When you add a reader or a regular expression,** add a hostile-input test to `test/robustness.test.ts` first, with a line made to make it slow, and see it fail if the protection is taken away. Do not build a regular expression from text that was read. See [decision 0005](docs/decisions/0005-hostile-input-is-bounded.md).
+4. When a check can be wrong, give the finding a lower confidence and not a louder message. See [decision 0002](docs/decisions/0002-confidence-and-evidence.md).
+5. A new or changed check goes in [docs/checks.md](docs/checks.md), with what it leaves alone.
+6. If you change a design decision, write or amend a record in `docs/decisions`. Say what it costs, not only why it is good.
+7. Keep the README true. Check each claim you touch against the code.
+8. Commit small, with a message that says what changed and why. Everything in the repository is written in English.
 
 ## Style
 

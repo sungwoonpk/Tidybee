@@ -38,6 +38,7 @@ An instruction file is written once and then the code moves on. The agent trusts
 ## Features
 
 - **Finds the instruction files of many agents,** and knows which are read always, for some files, or only on request.
+- **Finds copies that drifted.** `CLAUDE.md` and `AGENTS.md` often start as one text and end as two. Tidybee says how far they have moved apart.
 - **Evidence from Git.** A missing path that Git remembers being deleted or renamed is a certain error, and says where it went.
 - **Honest about doubt.** Findings are `high`, `medium` or `low` confidence, and `low` ones need `--all`.
 - **Safe on other people's code.** It only reads. It never runs a script from the repository, and it runs Git with the setting that lets a repository run a program turned off.
@@ -68,13 +69,17 @@ Exit codes: `0` when nothing at or above `--fail-on` was found, `1` when somethi
 
 ## What it checks
 
-| Check                                          | Finds                                                                 |
-| ---------------------------------------------- | --------------------------------------------------------------------- |
-| `stale-path`                                   | A path in a code span or a shell block that is not in the repository  |
-| `stale-link`, `stale-anchor`                   | A Markdown link to a missing file or heading                          |
-| `stale-import`, `import-cycle`, `import-depth` | An `@import` that is missing, loops, or nests deeper than five        |
-| `stale-command`                                | An `npm run`, `make` or `just` that names something that is not there |
-| `package-manager`                              | `npm` in a `pnpm` repository, and the like                            |
+| Check                                                    | Finds                                                                      |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `stale-path`                                             | A path in a code span or a shell block that is not in the repository       |
+| `stale-link`, `stale-anchor`                             | A Markdown link to a missing file or heading                               |
+| `stale-import`, `import-cycle`, `import-depth`           | An `@import` that is missing, loops, or nests deeper than five             |
+| `stale-command`                                          | An `npm run`, `make` or `just` that names something that is not there      |
+| `package-manager`                                        | `npm` in a `pnpm` repository, and the like                                 |
+| `stale-tree`                                             | A folder tree in the text whose entries are no longer in the repository    |
+| `rule-header`                                            | Bad headers in Cursor, Copilot and Windsurf rules, skills and agents       |
+| `drifting-files`, `identical-files`, `duplicate-content` | The same instructions in several files, and copies that drifted            |
+| `file-size`, `filler`, `todo-marker` and others          | Files that are too large, generic advice, unfinished parts, empty sections |
 
 How each one works, and what it leaves alone on purpose, is in [docs/checks.md](docs/checks.md).
 
@@ -99,4 +104,4 @@ CI runs the same on Node 22 and 24, builds the command and runs it on the exampl
 
 ## Status
 
-The first milestone: it reads and checks, and does not fix anything yet. Contradictions, duplicated files, bloat, secrets, fixing and syncing are planned and listed in [docs/limits.md](docs/limits.md). It has had no independent security review.
+It reads and checks, and does not fix anything yet. Contradicting rules, secrets, configuration, fixing and syncing are planned and listed in [docs/limits.md](docs/limits.md). It has had no independent security review.

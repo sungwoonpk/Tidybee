@@ -64,6 +64,17 @@ jobs:
           grep -q "npm run lint" broken.txt
           grep -q "docs/guide.md" broken.txt
           grep -q "docs/rules.md" broken.txt
+      - name: The compiled command finds the problems in the messy example
+        run: |
+          set +e
+          node dist/src/cli.js check examples/messy > messy.txt
+          code=$?
+          set -e
+          cat messy.txt
+          [ "$code" = "1" ]
+          for rule in rule-header stale-tree drifting-files filler todo-marker empty-section; do
+            grep -q "$rule" messy.txt
+          done
 
   audit:
     name: Dependency audit

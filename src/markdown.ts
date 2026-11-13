@@ -57,8 +57,14 @@ export interface ParsedMarkdown {
   links: Link[];
   fences: Fence[];
   imports: Import[];
-  /** Lines of text outside code blocks and frontmatter, with the line number of each. */
+  /** Lines of text outside code blocks and frontmatter, with the line number of each. Code spans are blanked out. */
   prose: FenceLine[];
+  /** The same lines as written, with their code spans. */
+  body: FenceLine[];
+  /** Sentences and list items, as plain text, with the line each starts on. Headings, tables and comments are left out. */
+  statements: FenceLine[];
+  /** HTML comments, which a reader of rendered Markdown does not see and an agent does. The text is the inside of the comment. */
+  comments: FenceLine[];
 }
 
 /** The anchor GitHub gives a heading: lower case, punctuation dropped, spaces to hyphens. */
@@ -134,6 +140,35 @@ export function parseFrontmatter(lines: string[]): Frontmatter | null {
   return { data, endLine: end + 1 };
 }
 
+/** True when a line closes a code block opened with `marker`: only that character, at least as many times. */
+function closesFence(text: string, marker: string): boolean {
+  const t = text.trim();
+  if (t.length < marker.length) return false;
+  for (const c of t) if (c !== marker[0]) return false;
+  return true;
+}
+
+/**
+ * Reads an ATX heading ("## Title", with an optional closing "##") without a regular expression, since a line of many
+ * spaces and hashes can make one that is written the usual way take far too long.
+ */
+function parseHeading(text: string): { level: number; text: string } | null {
+  let i = 0;
+  while (i < 3 && text[i] === " ") i++;
+  let level = 0;
+  while (text[i + level] === "#") level++;
+  if (level < 1 || level > 6) return null;
+  const after = text.slice(i + level);
+  if (after[0] !== " " && after[0] !== "\t") return null;
+  let rest = after.trim();
+  let end = rest.length;
+  while (end > 0 && rest[end - 1] === "#") end--;
+  // A closing run of hashes counts only after a space, or when it is the whole text.
+  if (end < rest.length && (end === 0 || rest[end - 1] === " " || rest[end - 1] === "\t"))
+    rest = rest.slice(0, end).trimEnd();
+  return rest === "" ? null : { level, text: rest };
+}
+
 const FENCE_OPEN = /^(\s*)(`{3,}|~{3,})\s*([^\s`]*)/;
 
 /** The index of the next run of exactly `length` backticks at or after `from`, or -1. Longer or shorter runs do not count. */
@@ -194,6 +229,9 @@ export function parseMarkdown(source: string): ParsedMarkdown {
     fences: [],
     imports: [],
     prose: [],
+    body: [],
+    statements: [],
+    comments: [],
   };
 
   let fence: { marker: string; fence: Fence } | null = null;
@@ -203,8 +241,7 @@ export function parseMarkdown(source: string): ParsedMarkdown {
     const lineNo = i + 1;
 
     if (fence) {
-      const close = new RegExp(`^\\s*${fence.marker[0] === "`" ? "`" : "~"}{${fence.marker.length},}\\s*$`);
-      if (close.test(text)) {
+      if (closesFence(text, fence.marker)) {
         result.fences.push(fence.fence);
         fence = null;
       } else {
@@ -221,21 +258,20 @@ export function parseMarkdown(source: string): ParsedMarkdown {
       continue;
     }
 
-    const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text);
+    const heading = parseHeading(text);
     if (heading) {
-      const headingText = (heading[2] as string).replace(/`([^`]*)`/g, "$1");
-      result.headings.push({
-        level: (heading[1] as string).length,
-        text: headingText,
-        line: lineNo,
-        slug: slugify(headingText),
-      });
+      const headingText = heading.text.replace(/`([^`]*)`/g, "$1");
+      result.headings.push({ level: heading.level, text: headingText, line: lineNo, slug: slugify(headingText) });
     }
 
     const blanked = codeSpansOf(text, lineNo, result.codeSpans);
     result.prose.push({ text: blanked, line: lineNo });
+    result.body.push({ text, line: lineNo });
 
-    for (const m of blanked.matchAll(/!?\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) {
+    // The parts have an upper size, so that a line made only of brackets cannot make the search go on for ever.
+    for (const m of blanked.matchAll(
+      /!?\[([^\]]{0,500})\]\(\s{0,100}<?([^)\s>]{1,2000})>?(?:\s{1,100}"[^"]{0,500}")?\s{0,100}\)/g,
+    )) {
       result.links.push({ text: m[1] ?? "", target: m[2] as string, line: lineNo, column: (m.index ?? 0) + 1 });
     }
     // "@path/to/file", as Claude Code reads it. A bare "@name" is a mention and not an import, so a slash or a dot is needed.
@@ -247,5 +283,76 @@ export function parseMarkdown(source: string): ParsedMarkdown {
     }
   }
   if (fence) result.fences.push(fence.fence); // an unclosed block runs to the end of the file
+  const inComment = findComments(result.body, result.comments);
+  result.statements = statementsOf(result.body, inComment);
   return result;
+}
+
+/** Finds HTML comments in the body, which may run over several lines. Returns the set of line numbers they cover. */
+function findComments(body: FenceLine[], into: FenceLine[]): Set<number> {
+  const covered = new Set<number>();
+  let open: { line: number; parts: string[] } | null = null;
+  for (const { text, line } of body) {
+    let rest = text;
+    let guard = 0;
+    while (rest !== "" && guard++ < 50) {
+      if (open) {
+        const end = rest.indexOf("-->");
+        covered.add(line);
+        if (end < 0) {
+          open.parts.push(rest);
+          rest = "";
+        } else {
+          open.parts.push(rest.slice(0, end));
+          into.push({ text: open.parts.join(" ").replace(/\s+/g, " ").trim(), line: open.line });
+          open = null;
+          rest = rest.slice(end + 3);
+        }
+      } else {
+        const start = rest.indexOf("<!--");
+        if (start < 0) break;
+        covered.add(line);
+        open = { line, parts: [] };
+        rest = rest.slice(start + 4);
+      }
+    }
+  }
+  if (open) into.push({ text: open.parts.join(" ").replace(/\s+/g, " ").trim(), line: open.line });
+  return covered;
+}
+
+/** Splits the body into the sentences and list items a person would call separate statements. */
+function statementsOf(body: FenceLine[], skip: Set<number>): FenceLine[] {
+  const out: FenceLine[] = [];
+  let para: FenceLine[] = [];
+  const flush = (): void => {
+    if (para.length === 0) return;
+    const text = para
+      .map((p) => p.text.trim())
+      .join(" ")
+      .replace(/\s+/g, " ");
+    for (const sentence of text.split(/(?<=[.!?])\s+(?=[A-Z0-9`"'([])/)) {
+      if (sentence.trim() !== "") out.push({ text: sentence.trim(), line: (para[0] as FenceLine).line });
+    }
+    para = [];
+  };
+  for (const { text, line } of body) {
+    if (skip.has(line) || text.trim() === "") {
+      flush();
+      continue;
+    }
+    if (/^ {0,3}#{1,6}\s/.test(text) || /^\s*\|/.test(text) || /^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(text)) {
+      flush();
+      continue;
+    }
+    const item = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(text);
+    if (item) {
+      flush();
+      para = [{ text: (item[1] as string).replace(/^\[[ xX]\]\s+/, ""), line }];
+      continue;
+    }
+    para.push({ text: text.replace(/^\s*>\s?/, ""), line });
+  }
+  flush();
+  return out;
 }

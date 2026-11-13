@@ -144,3 +144,116 @@ test("Windows line endings are read the same", () => {
   assert.equal(md.lines.length, 3);
   assert.equal(md.codeSpans[0]?.text, "x");
 });
+
+test("statements: list items and sentences, with the line each starts on, and no headings, tables, code or comments", () => {
+  const md = parseMarkdown(
+    [
+      "# Title",
+      "",
+      "Use pnpm. Never use npm here.",
+      "",
+      "- Run `pnpm test` first",
+      "  and then lint.",
+      "* [x] Done item",
+      "1. Numbered one",
+      "",
+      "| a | b |",
+      "|---|---|",
+      "",
+      "```",
+      "code line.",
+      "```",
+      "",
+      "<!-- hidden. text -->",
+      "> Quoted advice. More.",
+      "---",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    md.statements.map((s) => [s.line, s.text]),
+    [
+      [3, "Use pnpm."],
+      [3, "Never use npm here."],
+      [5, "Run `pnpm test` first and then lint."],
+      [7, "Done item"],
+      [8, "Numbered one"],
+      [18, "Quoted advice."],
+      [18, "More."],
+    ],
+  );
+});
+
+test("a sentence is not split at an abbreviation followed by lower case", () => {
+  const md = parseMarkdown("Use tools, e.g. a linter. Then commit.\n");
+  assert.deepEqual(
+    md.statements.map((s) => s.text),
+    ["Use tools, e.g. a linter.", "Then commit."],
+  );
+});
+
+test("HTML comments are found, on one line or several, and their lines are not statements", () => {
+  const md = parseMarkdown(
+    [
+      "before",
+      "<!-- one --> text <!-- two -->",
+      "<!--",
+      "multi",
+      "line",
+      "-->",
+      "after",
+      "<!-- never closed",
+      "still",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    md.comments.map((c) => [c.line, c.text]),
+    [
+      [2, "one"],
+      [2, "two"],
+      [3, "multi line"],
+      [8, "never closed still"],
+    ],
+  );
+  assert.deepEqual(
+    md.statements.map((s) => s.text),
+    ["before", "after"],
+  );
+});
+
+test("headings: closing hashes, tabs, indentation and what is not a heading", () => {
+  const md = parseMarkdown(
+    [
+      "# One #",
+      "##\tTwo ##",
+      "   ### Three",
+      "    #### four spaces is code",
+      "####### seven",
+      "#NoSpace",
+      "# ",
+      "## C# language",
+      "### #",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    md.headings.map((h) => [h.level, h.text]),
+    [
+      [1, "One"],
+      [2, "Two"],
+      [3, "Three"],
+      [2, "C# language"],
+    ],
+  );
+});
+
+test("a code block is closed by the same character at least as many times, with spaces around", () => {
+  const md = parseMarkdown(["````", "```", "inner", "```", "  ````  ", "after"].join("\n"));
+  assert.deepEqual(
+    md.fences[0]?.lines.map((l) => l.text),
+    ["```", "inner", "```"],
+  );
+  const mixed = parseMarkdown(["```", "a", "~~~", "b", "```"].join("\n"));
+  assert.deepEqual(
+    mixed.fences[0]?.lines.map((l) => l.text),
+    ["a", "~~~", "b"],
+  );
+});

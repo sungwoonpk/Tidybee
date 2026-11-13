@@ -1,0 +1,8 @@
+{
+  "name": "invoice",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test"
+  }
+}

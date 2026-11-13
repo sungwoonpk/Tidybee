@@ -1,5 +1,9 @@
 import { type Context, alwaysTokens, buildContext } from "./analyze.js";
 import { staleCommands } from "./checks/commands.js";
+import { duplication } from "./checks/duplication.js";
+import { headers } from "./checks/headers.js";
+import { quality } from "./checks/quality.js";
+import { staleTrees } from "./checks/tree.js";
 import { staleImports, stalePaths, staleLinks } from "./checks/refs.js";
 import type { Confidence, Finding, Severity } from "./types.js";
 
@@ -18,6 +22,8 @@ export interface Report {
   /** Estimated tokens an agent reads at the start of every session, from the files it always loads. */
   alwaysLoadedTokens: number;
   counts: Record<Severity, number>;
+  /** How many instruction files were found beyond the limit and not checked. */
+  skippedFiles: number;
   /** How many findings were left out for being less certain than the minimum asked for. */
   hidden: number;
 }
@@ -31,7 +37,16 @@ export interface CheckOptions {
 const CONFIDENCE_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
 
-export const CHECKS: ((ctx: Context) => Finding[])[] = [stalePaths, staleLinks, staleImports, staleCommands];
+export const CHECKS: ((ctx: Context) => Finding[])[] = [
+  stalePaths,
+  staleLinks,
+  staleImports,
+  staleCommands,
+  staleTrees,
+  headers,
+  duplication,
+  quality,
+];
 
 export function analyze(ctx: Context, options: CheckOptions = {}): Report {
   const min = CONFIDENCE_RANK[options.minConfidence ?? "medium"];
@@ -54,6 +69,7 @@ export function analyze(ctx: Context, options: CheckOptions = {}): Report {
     findings,
     alwaysLoadedTokens: ctx.docs.reduce((sum, d) => sum + alwaysTokens(d), 0),
     counts,
+    skippedFiles: ctx.skippedDocs,
     hidden: all.length - findings.length,
   };
 }

@@ -39,3 +39,5 @@ flowchart LR
 ## Safety
 
 Tidybee is meant to be run on repositories you did not write. It only reads. It does not run scripts, install anything or follow a command it finds in a file. The one thing it executes is `git`, always with fixed arguments and with `core.fsmonitor` turned off, because a repository's own settings can name a program for Git to run, and with that setting even `git ls-files` runs it. A test builds such a repository and checks that nothing runs. Another checks that a run leaves the repository, including the Git index, exactly as it was.
+
+The files it reads are chosen by the repository's author, so it is also built not to hang or run out of memory on a crafted one. No regular expression is made from what is read, a glob is matched without one, every repeated part of the ones that remain has a limit, an instruction file is read to 2 MB and at most 500 are checked, and the inputs that were once slow are tests with time limits. See [decision 0005](decisions/0005-hostile-input-is-bounded.md).
