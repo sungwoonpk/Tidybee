@@ -57,8 +57,14 @@ export interface ParsedMarkdown {
   links: Link[];
   fences: Fence[];
   imports: Import[];
-  /** Lines of text outside code blocks and frontmatter, with the line number of each. */
+  /** Lines of text outside code blocks and frontmatter, with the line number of each. Code spans are blanked out. */
   prose: FenceLine[];
+  /** The same lines as written, with their code spans. */
+  body: FenceLine[];
+  /** Sentences and list items, as plain text, with the line each starts on. Headings, tables and comments are left out. */
+  statements: FenceLine[];
+  /** HTML comments, which a reader of rendered Markdown does not see and an agent does. The text is the inside of the comment. */
+  comments: FenceLine[];
 }
 
 /** The anchor GitHub gives a heading: lower case, punctuation dropped, spaces to hyphens. */
@@ -194,6 +200,9 @@ export function parseMarkdown(source: string): ParsedMarkdown {
     fences: [],
     imports: [],
     prose: [],
+    body: [],
+    statements: [],
+    comments: [],
   };
 
   let fence: { marker: string; fence: Fence } | null = null;
@@ -234,6 +243,7 @@ export function parseMarkdown(source: string): ParsedMarkdown {
 
     const blanked = codeSpansOf(text, lineNo, result.codeSpans);
     result.prose.push({ text: blanked, line: lineNo });
+    result.body.push({ text, line: lineNo });
 
     for (const m of blanked.matchAll(/!?\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) {
       result.links.push({ text: m[1] ?? "", target: m[2] as string, line: lineNo, column: (m.index ?? 0) + 1 });
@@ -247,5 +257,76 @@ export function parseMarkdown(source: string): ParsedMarkdown {
     }
   }
   if (fence) result.fences.push(fence.fence); // an unclosed block runs to the end of the file
+  const inComment = findComments(result.body, result.comments);
+  result.statements = statementsOf(result.body, inComment);
   return result;
+}
+
+/** Finds HTML comments in the body, which may run over several lines. Returns the set of line numbers they cover. */
+function findComments(body: FenceLine[], into: FenceLine[]): Set<number> {
+  const covered = new Set<number>();
+  let open: { line: number; parts: string[] } | null = null;
+  for (const { text, line } of body) {
+    let rest = text;
+    let guard = 0;
+    while (rest !== "" && guard++ < 50) {
+      if (open) {
+        const end = rest.indexOf("-->");
+        covered.add(line);
+        if (end < 0) {
+          open.parts.push(rest);
+          rest = "";
+        } else {
+          open.parts.push(rest.slice(0, end));
+          into.push({ text: open.parts.join(" ").replace(/\s+/g, " ").trim(), line: open.line });
+          open = null;
+          rest = rest.slice(end + 3);
+        }
+      } else {
+        const start = rest.indexOf("<!--");
+        if (start < 0) break;
+        covered.add(line);
+        open = { line, parts: [] };
+        rest = rest.slice(start + 4);
+      }
+    }
+  }
+  if (open) into.push({ text: open.parts.join(" ").replace(/\s+/g, " ").trim(), line: open.line });
+  return covered;
+}
+
+/** Splits the body into the sentences and list items a person would call separate statements. */
+function statementsOf(body: FenceLine[], skip: Set<number>): FenceLine[] {
+  const out: FenceLine[] = [];
+  let para: FenceLine[] = [];
+  const flush = (): void => {
+    if (para.length === 0) return;
+    const text = para
+      .map((p) => p.text.trim())
+      .join(" ")
+      .replace(/\s+/g, " ");
+    for (const sentence of text.split(/(?<=[.!?])\s+(?=[A-Z0-9`"'(\[])/)) {
+      if (sentence.trim() !== "") out.push({ text: sentence.trim(), line: (para[0] as FenceLine).line });
+    }
+    para = [];
+  };
+  for (const { text, line } of body) {
+    if (skip.has(line) || text.trim() === "") {
+      flush();
+      continue;
+    }
+    if (/^ {0,3}#{1,6}\s/.test(text) || /^\s*\|/.test(text) || /^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(text)) {
+      flush();
+      continue;
+    }
+    const item = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(text);
+    if (item) {
+      flush();
+      para = [{ text: (item[1] as string).replace(/^\[[ xX]\]\s+/, ""), line }];
+      continue;
+    }
+    para.push({ text: text.replace(/^\s*>\s?/, ""), line });
+  }
+  flush();
+  return out;
 }
