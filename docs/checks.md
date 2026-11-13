@@ -119,3 +119,6 @@ The report says about how many tokens an agent reads at the start of every sessi
 - A tree is read by its indentation. A tree that mixes tabs, or a layout written as a plain indented list, is not read.
 - The size limits in the quality checks are judgment. A repository that wants a larger file will see the note every run until there is a way to configure it.
 - Statements are compared as written, so the same rule in other words is not found.
+- An instruction file is read to 2 MB. A larger one is checked as far as that, and a `file-too-large` warning says so. At most 500 instruction files are checked in a repository, and the report says how many were left. Other files, such as `package.json`, are read to 5 MB.
+- A glob longer than 300 characters or with more than 64 choices in its braces is not judged, so a header that uses one is never reported as matching nothing.
+- A link whose target is over 2,000 characters, or whose text is over 500, is not read as a link.

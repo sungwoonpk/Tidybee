@@ -219,3 +219,41 @@ test("HTML comments are found, on one line or several, and their lines are not s
     ["before", "after"],
   );
 });
+
+test("headings: closing hashes, tabs, indentation and what is not a heading", () => {
+  const md = parseMarkdown(
+    [
+      "# One #",
+      "##\tTwo ##",
+      "   ### Three",
+      "    #### four spaces is code",
+      "####### seven",
+      "#NoSpace",
+      "# ",
+      "## C# language",
+      "### #",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    md.headings.map((h) => [h.level, h.text]),
+    [
+      [1, "One"],
+      [2, "Two"],
+      [3, "Three"],
+      [2, "C# language"],
+    ],
+  );
+});
+
+test("a code block is closed by the same character at least as many times, with spaces around", () => {
+  const md = parseMarkdown(["````", "```", "inner", "```", "  ````  ", "after"].join("\n"));
+  assert.deepEqual(
+    md.fences[0]?.lines.map((l) => l.text),
+    ["```", "inner", "```"],
+  );
+  const mixed = parseMarkdown(["```", "a", "~~~", "b", "```"].join("\n"));
+  assert.deepEqual(
+    mixed.fences[0]?.lines.map((l) => l.text),
+    ["a", "~~~", "b"],
+  );
+});

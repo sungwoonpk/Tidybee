@@ -1,5 +1,5 @@
 import type { Context, Doc } from "../analyze.js";
-import { countMatches, splitGlobs } from "../glob.js";
+import { anyMatch, splitGlobs } from "../glob.js";
 import type { Finding } from "../types.js";
 
 // Checks the header (the "frontmatter") of the rule and skill files that agents read, against what each agent documents.
@@ -12,10 +12,14 @@ function toList(value: unknown): string[] {
 
 /** The line of a header key, or 1. */
 function lineOf(doc: Doc, key: string): number {
-  const i = doc.md.lines.findIndex(
-    (l, idx) => idx < (doc.md.frontmatter?.endLine ?? 0) && new RegExp(`^${key}\\s*:`).test(l),
-  );
-  return i < 0 ? 1 : i + 1;
+  const end = doc.md.frontmatter?.endLine ?? 0;
+  for (let i = 0; i < end && i < doc.md.lines.length; i++) {
+    const rest = (doc.md.lines[i] as string).startsWith(key)
+      ? (doc.md.lines[i] as string).slice(key.length).trimStart()
+      : null;
+    if (rest !== null && rest.startsWith(":")) return i + 1;
+  }
+  return 1;
 }
 
 function cursor(ctx: Context, d: Doc, out: Finding[]): void {
@@ -51,7 +55,7 @@ function cursor(ctx: Context, d: Doc, out: Finding[]): void {
         "This rule has no `description`, no `globs` and no `alwaysApply`, so Cursor uses it only when someone names it.",
     });
   }
-  if (fm.alwaysApply !== true && globs.length > 0 && countMatches(globs, ctx.index.files) === 0) {
+  if (fm.alwaysApply !== true && globs.length > 0 && anyMatch(globs, ctx.index.files) === false) {
     add("globs", {
       rule: "rule-header",
       severity: "warning",
@@ -77,7 +81,7 @@ function copilotScoped(ctx: Context, d: Doc, out: Finding[]): void {
       message:
         "This instructions file has no `applyTo` and no `description`, so Copilot has no way to decide when to use it.",
     });
-  } else if (applyTo.length > 0 && countMatches(applyTo, ctx.index.files) === 0) {
+  } else if (applyTo.length > 0 && anyMatch(applyTo, ctx.index.files) === false) {
     out.push({
       file: d.file.path,
       line: lineOf(d, "applyTo"),
@@ -126,7 +130,7 @@ function windsurf(ctx: Context, d: Doc, out: Finding[]): void {
       confidence: "high",
       message: "The trigger is `glob` and there are no `globs`, so the rule never applies.",
     });
-  } else if (trigger === "glob" && countMatches(globs, ctx.index.files) === 0) {
+  } else if (trigger === "glob" && anyMatch(globs, ctx.index.files) === false) {
     add("globs", {
       rule: "rule-header",
       severity: "warning",

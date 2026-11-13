@@ -156,3 +156,12 @@ test("every kind of instruction file is found, with when an agent reads it", (t)
   });
   assert.equal(discover(indexRepo(root)).find((f) => f.path === "packages/web/AGENTS.md")?.dir, "packages/web");
 });
+
+test("readCapped reads at most what it is allowed to, and says how big the file is", (t) => {
+  const root = makeRepo(t, { "big.txt": "x".repeat(1000), "small.txt": "hi" });
+  const index = indexRepo(root);
+  assert.deepEqual(index.readCapped("small.txt", 100), { text: "hi", size: 2, truncated: false });
+  assert.deepEqual(index.readCapped("big.txt", 100), { text: "x".repeat(100), size: 1000, truncated: true });
+  assert.deepEqual(index.readCapped("big.txt", 1000), { text: "x".repeat(1000), size: 1000, truncated: false });
+  assert.deepEqual(index.readCapped("empty.txt".replace("empty", "small"), 0), { text: "", size: 2, truncated: true });
+});

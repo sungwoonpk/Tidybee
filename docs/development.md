@@ -12,6 +12,7 @@ npm run check          # lint, format, types, and tests with coverage gates
 - **Real Git repositories.** The tests make temporary repositories, commit, rename and delete files, and check that a missing path is explained by the right commit.
 - **The real command line.** A test starts `tidybee` as a separate process and checks the output and the exit code.
 - **Safety.** A repository with a hostile Git setting must not make Tidybee run a program, and a run must change nothing in the repository. The first was checked by taking the protection away and watching the test fail.
+- **Hostile input.** `test/robustness.test.ts` feeds each reader lines made to make it slow (60,000 spaces after a heading, brackets that never close, a glob with forty `**`, a path of five thousand folders) and fails if one takes over a second and a half. These are the inputs that really did hang the first versions. Each protection was taken away in turn to see its test fail.
 - **Coverage gates** are 95% of lines, 95% of functions and 85% of branches. CI fails below them.
 - **The examples.** CI builds the command and runs it on `examples/healthy`, which must pass, and `examples/broken`, which must exit with 1 and name its problems.
 

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { git } from "./gitrun.js";
 
@@ -18,7 +18,10 @@ export interface RepoIndex {
   dirsNamed(name: string): string[];
   /** True when the first part of the path is a file or folder at the top of the repository. */
   hasTopLevel(segment: string): boolean;
+  /** The text of a file, at most `MAX_READ_BYTES`. A larger file is read only as far as that. */
   read(path: string): string;
+  /** The text of a file, at most `max` bytes of it, and how big the file is. */
+  readCapped(path: string, max: number): { text: string; size: number; truncated: boolean };
   /** Which of these paths Git would ignore. Empty when Git was not used. */
   ignored(paths: string[]): Set<string>;
 }
@@ -44,6 +47,9 @@ const SKIPPED_DIRS = new Set([
 
 const MAX_FILES = 200_000;
 
+/** The most that is read from any file that is not an instruction file, such as a package.json or a Makefile. */
+export const MAX_READ_BYTES = 5 * 1024 * 1024;
+
 function listWithGit(root: string): string[] | null {
   // Tracked files and files that are not ignored but not yet added, minus any deleted from disk but still in the index.
   const all = git(root, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"]);
@@ -58,6 +64,19 @@ function ignoredBy(root: string, paths: string[]): Set<string> {
   // "git check-ignore" exits with 1 when none of the paths are ignored, which comes back here as null, as does any failure.
   const out = git(root, ["check-ignore", "--stdin", "-z"], { input: paths.join("\0") });
   return new Set((out ?? "").split("\0").filter(Boolean));
+}
+
+/** Reads at most `max` bytes of a file, so that a huge file in someone's repository cannot use up the memory. */
+function readCapped(path: string, max: number): { text: string; size: number; truncated: boolean } {
+  const fd = openSync(path, "r");
+  try {
+    const size = fstatSync(fd).size;
+    const buffer = Buffer.alloc(Math.min(size, max));
+    const read = readSync(fd, buffer, 0, buffer.length, 0);
+    return { text: buffer.subarray(0, read).toString("utf8"), size, truncated: size > max };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function walk(root: string): string[] {
@@ -113,7 +132,8 @@ export function indexRepo(root: string, options: { useGit?: boolean } = {}): Rep
     byBasename: (name) => basenames.get(name) ?? [],
     dirsNamed: (name) => [...dirs].filter((d) => d === name || d.endsWith(`/${name}`)).sort(),
     hasTopLevel: (s) => top.has(s),
-    read: (p) => readFileSync(join(root, p), "utf8"),
+    read: (p) => readCapped(join(root, p), MAX_READ_BYTES).text,
+    readCapped: (p, max) => readCapped(join(root, p), max),
     ignored: (paths) => (usedGit ? ignoredBy(root, paths) : new Set()),
   };
 }

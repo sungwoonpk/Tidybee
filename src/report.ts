@@ -53,6 +53,15 @@ export function renderText(report: Report, options: RenderOptions): string {
       .map((s) => plural(report.counts[s], s === "info" ? "note" : s));
     lines.push(`${plural(report.findings.length, "problem")} (${parts.join(", ")}) in ${scope}.`);
   }
+  if (report.skippedFiles > 0) {
+    lines.push(
+      paint(
+        c,
+        "yellow",
+        `${plural(report.files.length + report.skippedFiles, "instruction file")} were found and only the first ${report.files.length.toLocaleString("en-US")} were checked.`,
+      ),
+    );
+  }
   if (report.hidden > 0 && options.showHiddenHint) {
     lines.push(
       paint(

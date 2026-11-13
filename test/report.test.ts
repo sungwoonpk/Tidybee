@@ -10,6 +10,7 @@ const base: Report = {
   findings: [],
   alwaysLoadedTokens: 1234,
   counts: { error: 0, warning: 0, info: 0 },
+  skippedFiles: 0,
   hidden: 0,
 };
 // The escape character that starts a terminal color code.
@@ -125,4 +126,10 @@ test("JSON carries a version and the whole report", () => {
   assert.deepEqual(parsed.counts, base.counts);
   assert.equal(parsed.alwaysLoadedTokens, 1234);
   assert.deepEqual(parsed.files, base.files);
+});
+
+test("it says when instruction files were found beyond the limit and were not checked", () => {
+  const text = renderText({ ...base, skippedFiles: 2500 }, plain);
+  assert.match(text, /2,501 instruction files were found and only the first 1 were checked\./);
+  assert.doesNotMatch(renderText(base, plain), /were found and only/);
 });

@@ -22,6 +22,8 @@ export interface Report {
   /** Estimated tokens an agent reads at the start of every session, from the files it always loads. */
   alwaysLoadedTokens: number;
   counts: Record<Severity, number>;
+  /** How many instruction files were found beyond the limit and not checked. */
+  skippedFiles: number;
   /** How many findings were left out for being less certain than the minimum asked for. */
   hidden: number;
 }
@@ -67,6 +69,7 @@ export function analyze(ctx: Context, options: CheckOptions = {}): Report {
     findings,
     alwaysLoadedTokens: ctx.docs.reduce((sum, d) => sum + alwaysTokens(d), 0),
     counts,
+    skippedFiles: ctx.skippedDocs,
     hidden: all.length - findings.length,
   };
 }

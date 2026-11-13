@@ -1,4 +1,4 @@
-import { alwaysTokens, type Context, type Doc } from "../analyze.js";
+import { alwaysTokens, MAX_DOC_BYTES, type Context, type Doc } from "../analyze.js";
 import { estimateTokens } from "../tokens.js";
 import type { Finding } from "../types.js";
 
@@ -13,6 +13,7 @@ export const ALWAYS_WARN_TOKENS = 5000;
 export const ON_DEMAND_NOTE_TOKENS = 8000;
 /** The most the files read at the start of every session should come to before it is worth a note. */
 export const BUDGET_TOKENS = 8000;
+const MAX_DOC_MB = MAX_DOC_BYTES / (1024 * 1024);
 const LONG_BLOCK_LINES = 60;
 const SHOUTING_WORDS = 12;
 
@@ -41,6 +42,17 @@ const ROOT_KINDS = new Set(["claude", "agents", "gemini", "copilot", "convention
 function sizeFindings(docs: Doc[]): Finding[] {
   const out: Finding[] = [];
   for (const d of docs) {
+    if (d.truncatedFrom !== null) {
+      out.push({
+        file: d.file.path,
+        line: 1,
+        column: 1,
+        rule: "file-too-large",
+        severity: "warning",
+        confidence: "high",
+        message: `This file is ${(d.truncatedFrom / (1024 * 1024)).toFixed(1)} MB. Only the first ${MAX_DOC_MB} MB were checked, so what comes after was not.`,
+      });
+    }
     const lines = d.md.lines.length;
     const base = { file: d.file.path, line: 1, column: 1 };
     if (d.load === "always" && d.tokens > ALWAYS_NOTE_TOKENS) {

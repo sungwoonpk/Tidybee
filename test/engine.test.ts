@@ -117,3 +117,11 @@ test("loadModeOf with no header falls back to the default for the kind", () => {
   assert.equal(loadModeOf(file, parseMarkdown("---\nglobs:\n---\nx")), "on-demand");
   assert.equal(loadModeOf({ ...file, kind: "claude", load: "always" }, parseMarkdown("x")), "always");
 });
+
+test("a repository with far too many instruction files is checked only as far as the limit, and says so", (t) => {
+  const files: Record<string, string> = {};
+  for (let i = 0; i < 503; i++) files[`pkg${String(i).padStart(3, "0")}/AGENTS.md`] = "Short note.\n";
+  const r = check(makeRepo(t, files));
+  assert.equal(r.files.length, 500);
+  assert.equal(r.skippedFiles, 3);
+});

@@ -160,3 +160,14 @@ test("a top-level file that never shows a command is noted with low confidence, 
     "a tiny file is not asked for commands",
   );
 });
+
+test("a file too big to read in full is said to be only partly checked", (t) => {
+  const huge = `${"word ".repeat(450_000)}\n`; // about 2.2 MB
+  const [f] = run(makeRepo(t, { "CLAUDE.md": huge })).filter((x) => x.rule === "file-too-large");
+  assert.deepEqual([f?.severity, f?.confidence], ["warning", "high"]);
+  assert.match(f?.message ?? "", /This file is 2\.\d MB\. Only the first 2 MB were checked/);
+  assert.equal(
+    run(makeRepo(t, { "CLAUDE.md": "small\n" })).some((x) => x.rule === "file-too-large"),
+    false,
+  );
+});
