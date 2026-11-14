@@ -19,6 +19,7 @@ Tidybee is meant to be run on repositories you did not write, so it is built to 
   tried and what is not covered.
 - It does not change the repository, including the Git index, and a test checks that.
 - It is built not to hang or use up memory on a crafted file: no regular expression is made from what is read, a glob is matched without one, and files are read up to a size limit. This was tried with lines made to make a reader slow, and the ones that were slow are tests. See [decision 0005](docs/decisions/0005-hostile-input-is-bounded.md).
+- Text from a repository is written out before the text report prints it, so a file cannot send an escape sequence to your terminal. A finding about a secret shows four characters of it and never the value. See [decision 0006](docs/decisions/0006-safety-findings-never-print-secrets.md).
 - It sends nothing anywhere. It does not use the network.
 - It has **not had an independent security review**, and it reads untrusted Markdown with a small reader of its own.
 

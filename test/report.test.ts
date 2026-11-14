@@ -133,3 +133,31 @@ test("it says when instruction files were found beyond the limit and were not ch
   assert.match(text, /2,501 instruction files were found and only the first 1 were checked\./);
   assert.doesNotMatch(renderText(base, plain), /were found and only/);
 });
+
+test("text from a repository cannot move the cursor or hide text: control and direction characters are written out", () => {
+  const r: Report = {
+    ...base,
+    files: [base.files[0]!],
+    counts: { error: 1, warning: 0, info: 0 },
+    findings: [
+      {
+        rule: "stale-path",
+        severity: "error",
+        confidence: "high",
+        file: `a${ESC}[2Jb.md`,
+        line: 1,
+        column: 1,
+        message: `\`x${ESC}[2K${ESC}[1Ay\` is gone ${String.fromCharCode(0x202e)}gpj`,
+        suggestion: `Use ${ESC}[8mhidden`,
+      },
+    ],
+  };
+  const text = renderText(r, plain);
+  assert.ok(!text.includes(ESC), "no escape reaches the terminal");
+  assert.ok(!text.includes(String.fromCharCode(0x202e)));
+  assert.match(text, /a\\u\{1b\}\[2Jb\.md/);
+  assert.match(text, /x\\u\{1b\}\[2K\\u\{1b\}\[1Ay/);
+  assert.match(text, /Use \\u\{1b\}\[8mhidden/);
+  // The JSON is data, and its string syntax already escapes control characters.
+  assert.ok(!renderJson(r).includes(ESC));
+});

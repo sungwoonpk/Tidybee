@@ -1,8 +1,12 @@
 import { type Context, alwaysTokens, buildContext } from "./analyze.js";
 import { staleCommands } from "./checks/commands.js";
+import { contradictions } from "./checks/contradictions.js";
 import { duplication } from "./checks/duplication.js";
 import { headers } from "./checks/headers.js";
+import { hiddenText } from "./checks/hidden.js";
 import { quality } from "./checks/quality.js";
+import { riskyCommands } from "./checks/risky.js";
+import { secrets } from "./checks/secrets.js";
 import { staleTrees } from "./checks/tree.js";
 import { staleImports, stalePaths, staleLinks } from "./checks/refs.js";
 import type { Confidence, Finding, Severity } from "./types.js";
@@ -46,6 +50,10 @@ export const CHECKS: ((ctx: Context) => Finding[])[] = [
   headers,
   duplication,
   quality,
+  contradictions,
+  hiddenText,
+  secrets,
+  riskyCommands,
 ];
 
 export function analyze(ctx: Context, options: CheckOptions = {}): Report {

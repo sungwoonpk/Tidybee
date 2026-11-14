@@ -2,10 +2,12 @@
 
 Each record says what was decided, why, and what it costs. Newest last.
 
-| #    | Decision                                                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0001 | [TypeScript on Node, with no runtime dependencies](0001-typescript-no-dependencies.md)                                                     |
-| 0002 | [Every finding carries a confidence, and a missing path is explained by Git](0002-confidence-and-evidence.md)                              |
-| 0003 | [Tidybee runs Git safely, because it reads repositories it did not make](0003-safe-git.md)                                                 |
-| 0004 | [Quality checks are judgment calls, and say so](0004-quality-checks-are-judgment-and-say-so.md)                                            |
-| 0005 | [Hostile input is bounded: no regular expression is built from what is read, and every size has a limit](0005-hostile-input-is-bounded.md) |
+| #    | Decision                                                                                                                                                    |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0001 | [TypeScript on Node, with no runtime dependencies](0001-typescript-no-dependencies.md)                                                                      |
+| 0002 | [Every finding carries a confidence, and a missing path is explained by Git](0002-confidence-and-evidence.md)                                               |
+| 0003 | [Tidybee runs Git safely, because it reads repositories it did not make](0003-safe-git.md)                                                                  |
+| 0004 | [Quality checks are judgment calls, and say so](0004-quality-checks-are-judgment-and-say-so.md)                                                             |
+| 0005 | [Hostile input is bounded: no regular expression is built from what is read, and every size has a limit](0005-hostile-input-is-bounded.md)                  |
+| 0006 | [Safety findings never print a secret, and text from a repository is written out before it reaches a terminal](0006-safety-findings-never-print-secrets.md) |
+| 0007 | [The contradiction check reads a short list of topics, and says nothing about the rest](0007-contradictions-are-narrow-on-purpose.md)                       |

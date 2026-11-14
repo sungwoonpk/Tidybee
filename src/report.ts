@@ -1,4 +1,5 @@
 import type { Report } from "./engine.js";
+import { printable } from "./text.js";
 import type { Severity } from "./types.js";
 
 export interface RenderOptions {
@@ -32,14 +33,14 @@ export function renderText(report: Report, options: RenderOptions): string {
   for (const f of report.findings) {
     if (f.file !== current) {
       if (current !== "") lines.push("");
-      lines.push(paint(c, "bold", f.file));
+      lines.push(paint(c, "bold", printable(f.file)));
       current = f.file;
     }
     const where = `${f.line}:${f.column}`.padEnd(7);
     lines.push(
-      `  ${paint(c, "dim", where)} ${paint(c, SEVERITY_STYLE[f.severity], f.severity.padEnd(7))} ${f.message} ${paint(c, "dim", f.rule)}`,
+      `  ${paint(c, "dim", where)} ${paint(c, SEVERITY_STYLE[f.severity], f.severity.padEnd(7))} ${printable(f.message)} ${paint(c, "dim", f.rule)}`,
     );
-    if (f.suggestion) lines.push(`          ${paint(c, "green", "->")} ${f.suggestion}`);
+    if (f.suggestion) lines.push(`          ${paint(c, "green", "->")} ${printable(f.suggestion)}`);
   }
   if (report.findings.length > 0) lines.push("");
 

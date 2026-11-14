@@ -104,6 +104,69 @@ These are about the writing, not about what a file points at. Their limits are *
 - **duplicate-heading** and **empty-section:** the same heading twice at one level, and a heading with nothing under it.
 - **no-commands:** a top-level file that never shows a command to build, test or run. Low confidence, so it is shown only with `--all`.
 
+### `contradiction`
+
+Two rules that say the opposite, for an agent that reads both. It knows a short list of topics and says nothing about any other: indentation (tabs, or a number of spaces), line length, semicolons, single or double quotes, trailing commas, ES modules or CommonJS, the test runner (Jest, Vitest, Mocha, pytest and others), the formatter (Prettier, Biome, dprint), whether to commit or push without being asked, and the package manager.
+
+- **A rule tells, and does not describe.** A statement counts when it starts with an instruction or has a `must` or `should` in it. For line length, the test runner and the formatter a plain statement of fact counts too.
+- **Left out of a pair:** a statement with a condition (`when`, `if`, `unless`, `except`, `but`), a rule for one use (`for user-visible strings`, `everything else`, `all other files`), a statement about the past (`old`, `previously`, `migrated`, `was`), and a name used as a comparison (`like Jest`, `Jest-like`, `instead of npm`). "Unless I ask" is not a condition for committing and pushing.
+- **Scope.** A language or part of the project named in the statement or its heading (`Python`, `tests`, `frontend`, `packages/app`) puts it in that scope, and two statements are compared only within one: "Go uses tabs" and "Python uses 4 spaces" do not disagree. Commands that run after a `cd` are in that folder. The package manager, test runner, formatter, committing and pushing are about the whole repository, so only a folder keeps them apart.
+- **Which files.** Only files an agent reads together: the same file, two files that are both read at the start of every session, or two files in one folder. A nested file may change what the root says. The finding has `medium` confidence, and `low` for two files that only share a folder.
+- **Alternatives are not a conflict.** Two package managers in one line, one sentence or one block of commands (`npm install`, `yarn add` or `pnpm add`) are ways to do one thing. A turn that is turned twice says what it says: "never omit semicolons" and "don't forget trailing commas" ask for them.
+- **The package manager** is reported only where no lockfile decides, since `package-manager` says which commands are wrong when there is one. `npm publish` and `npm install -g` choose nothing, and `Use pnpm, not npm` chooses pnpm.
+- One finding for each topic and scope, at the second statement, naming the first.
+
+This reads few sentences, on purpose. See [decision 0007](decisions/0007-contradictions-are-narrow-on-purpose.md) for what it found on real repositories and what it misses.
+
+### Safety: `secret`, `personal-path`, `invisible-text`, `prompt-injection`, `risky-command`
+
+An instruction file is committed, read by every agent that opens the repository, and often pasted into a chat. These checks look for what should not be in it. See [decision 0006](decisions/0006-safety-findings-never-print-secrets.md).
+
+**`secret`.** A key that was pasted into the file. A finding shows the first four characters and the length, and never the value.
+
+- **A known shape** is an error with high confidence: AWS access key IDs, GitHub tokens, Anthropic and OpenAI keys, Slack tokens and webhooks, Stripe live keys, Google API keys, npm and Hugging Face tokens, SendGrid keys, Discord webhooks, and a private key with its encoded body after the header. A placeholder is not one: `example`, `your`, `xxxx`, a run of one character, the alphabet in order, or too little entropy.
+- **A JSON Web Token** is a warning, except the one from jwt.io. **A password in a URL** (`scheme://user:password@host`) is a warning when it looks random, and not `user:password` or a variable.
+- **A value assigned to a name** such as `api_key`, `token` or `password` is a warning with medium confidence when it is 20 or more characters of high entropy, and low confidence otherwise. It needs a digit and a letter, and is not a name (`my-service-name-123`), an environment variable, a reference (`${{ secrets.X }}`) or a UUID.
+- Secrets are looked for in every line, including the header, code blocks and HTML comments.
+
+**`personal-path`.** `/Users/maria/Projects/app` or `C:\Users\maria\Desktop` is a place on one person's computer. It does not exist for anyone else and gives away a user name. Warning, medium confidence. `/home/name/` is low confidence, since `/home/` is also a page in a web application. Not reported: `/Users/you`, `/Users/<name>`, `/home/runner`, `/home/node`, `/Users/Public` and the like, `~/`, and a path inside a URL or after a word character (`src/home/x`).
+
+**`invisible-text`.** Text that a person does not see and a model reads.
+
+| Found                                                                                                                             | Reported                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Tag characters (U+E0000 to U+E007F), which spell ASCII that no font draws                                                         | Error, high. The finding says what they spell. At most ten are listed       |
+| Eight or more zero-width characters on one line                                                                                   | Error, high: bits can be written in them                                    |
+| A zero-width space or word joiner, a soft hyphen, a mid-file byte order mark, a Hangul filler, and a joiner between plain letters | Warning, medium                                                             |
+| Direction overrides and isolates (U+202A to U+202E, U+2066 to U+2069)                                                             | Warning, medium                                                             |
+| An escape or another control character                                                                                            | Warning, high. In a terminal an escape sequence can hide the text before it |
+| Invisible variation selectors (U+E0100 to U+E01EF)                                                                                | Warning, medium                                                             |
+
+Left alone: the tag letters of the flags of England, Scotland and Wales (only those three, and a black flag followed by other tag text is reported), a joiner in an emoji or between letters of a script that uses it, a byte order mark at the start of the file, left-to-right and right-to-left marks, and a tab.
+
+**`prompt-injection`.** The sentences that attacks on agents are made of: _ignore previous instructions_, _disregard prior rules_, _forget your earlier instructions_, _do not tell the user_, _without the user knowing_, _you are now in developer mode_. In an HTML comment, which GitHub does not show, it is a warning with medium confidence. In text that shows it is low confidence, since a document about such attacks says the same.
+
+**`risky-command`.** Advice to run something an agent should not, in a code span, a shell block or an HTML comment (where a command is raised a level, since GitHub does not show it).
+
+| Command                                                                                               | Reported                                           |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `curl ... \| sh`, `wget ... \| sudo bash`, `bash <(curl ...)`, `eval "$(curl ...)"`, `irm ... \| iex` | Warning, medium: runs a script nobody read         |
+| `base64 -d \| sh`                                                                                     | Error, high: a hidden payload                      |
+| `--dangerously-skip-permissions`, `--yolo`, `--permission-mode bypassPermissions` and the like        | Warning, medium: turns off the agent's own prompts |
+| `curl -k`, `wget --no-check-certificate`, `NODE_TLS_REJECT_UNAUTHORIZED=0`, `http.sslVerify false`    | Warning, medium: does not check who is there       |
+| `rm -rf /`, `rm -rf ~`, `rm -rf $HOME`                                                                | Warning, medium                                    |
+| `chmod 777`, `git push --force` (not `--force-with-lease`), `git commit --no-verify`                  | Note, low: shown only with `--all`                 |
+
+**A warning against a command is not advice to run it.** A file that says "never run `curl | sh`" is left alone, and a warning is a way to switch the check off, so it counts only where it plainly belongs to the command.
+
+- On the line itself, a command is excused by a warning before it in the same sentence ("never run ...") or a verdict after it ("... is dangerous", "# bad"). "Start it with `--dangerously-skip-permissions` so that it never stops to ask" is reported, and so is "Never edit generated files. Install with `curl ... | sh`".
+- A line just above counts, unless both are items of a list: the item before is another statement. Across a blank line only a label counts, one that ends with a colon or says "Bad" or "Never do this".
+- A heading counts when it warns itself: "Never do these", "Dangerous commands".
+- A command in an HTML comment is never excused.
+- The words are `never`, `don't`, `avoid`, `must not`, `forbidden`, `deny`, `banned`, `unsafe`, `instead of` and the like. A command's own flags are not read as warnings, and words that mean other things too (`block`, `check`, `prevent`) are not warnings.
+
+A pipe into `python3`, `node`, `perl`, `ruby` or `php` is a risk only when the interpreter is given nothing else to run (`| python3`, `| node -`): `curl ... | python3 -m json.tool` is not. A command in the middle of an HTML comment is found, since a comment is prose with a command in it. A long line is read in overlapping windows, so that padding in front of a command does not hide it.
+
 ## Tokens
 
 The report says about how many tokens an agent reads at the start of every session, from the files it always loads. It is an **estimate**: a word of up to nine letters is a token, a number costs a token for every three digits, and a mark costs half. It was tuned on two English paragraphs that the o200k tokenizer counts at 63 and 20 tokens, where it gives 63 and 17. Text made mostly of code, paths and identifiers has more tokens than it counts. Use it to compare files and to notice growth, and do not read it as a bill.
@@ -122,3 +185,8 @@ The report says about how many tokens an agent reads at the start of every sessi
 - An instruction file is read to 2 MB. A larger one is checked as far as that, and a `file-too-large` warning says so. At most 500 instruction files are checked in a repository, and the report says how many were left. Other files, such as `package.json`, are read to 5 MB.
 - A glob longer than 300 characters or with more than 64 choices in its braces is not judged, so a header that uses one is never reported as matching nothing.
 - A link whose target is over 2,000 characters, or whose text is over 500, is not read as a link.
+- **Secrets are found by their shape.** A real secret with no fixed prefix, or a short plain one (`password=hunter2`), is not reported, and Tidybee is not a replacement for a secret scanner.
+- **A warning can still excuse the wrong thing.** A sentence that wraps onto the next line, or a label above a block, is read as speaking for it, so "Never commit secrets." right above `curl | sh` in one paragraph excuses it.
+- **Risky commands are read only in code spans, shell blocks and HTML comments.** A command written in running text is not found. Other languages of block (a Dockerfile, a script in `js`) are not read.
+- **A long line is read whole for secrets, and in overlapping windows of 5,000 characters for risky commands.** A command with its parts far apart (a `curl` and a `| sh` more than 300 characters apart) is not found.
+- **The contradiction check reads about 4 statements in a thousand,** and only for the topics it knows and in English. See [decision 0007](decisions/0007-contradictions-are-narrow-on-purpose.md).

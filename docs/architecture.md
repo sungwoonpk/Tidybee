@@ -33,11 +33,14 @@ flowchart LR
 | `src/repo.ts`, `src/project.ts`                    | The file index, and the scripts, targets and package manager                                       |
 | `src/git.ts`, `src/gitrun.ts`                      | Git history, and the one safe way Tidybee runs Git                                                 |
 | `src/markdown.ts`, `src/tokens.ts`, `src/paths.ts` | The Markdown reader, the token estimate, path arithmetic                                           |
-| `src/checks/`                                      | `refs.ts` (paths, links, imports) and `commands.ts`                                                |
-| `src/report.ts`                                    | Text and JSON output                                                                               |
+| `src/checks/`                                      | One file for each group of checks, listed in `docs/checks.md`. `context.ts` is what they share     |
+| `src/glob.ts`, `src/text.ts`                       | The glob matcher without regular expressions, and what a character does (hidden, control, entropy) |
+| `src/report.ts`                                    | Text and JSON output. Text from a file is written out before it is printed                         |
 
 ## Safety
 
 Tidybee is meant to be run on repositories you did not write. It only reads. It does not run scripts, install anything or follow a command it finds in a file. The one thing it executes is `git`, always with fixed arguments and with `core.fsmonitor` turned off, because a repository's own settings can name a program for Git to run, and with that setting even `git ls-files` runs it. A test builds such a repository and checks that nothing runs. Another checks that a run leaves the repository, including the Git index, exactly as it was.
 
 The files it reads are chosen by the repository's author, so it is also built not to hang or run out of memory on a crafted one. No regular expression is made from what is read, a glob is matched without one, every repeated part of the ones that remain has a limit, an instruction file is read to 2 MB and at most 500 are checked, and the inputs that were once slow are tests with time limits. See [decision 0005](decisions/0005-hostile-input-is-bounded.md).
+
+Text from the repository reaches the terminal inside messages, so the text report writes every control, direction, zero-width and tag character as `\u{...}` first. A file with an escape sequence in it cannot move the cursor or hide a finding. A finding about a secret shows four characters of it and its length, never the value. See [decision 0006](decisions/0006-safety-findings-never-print-secrets.md).

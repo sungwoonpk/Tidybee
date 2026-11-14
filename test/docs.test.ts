@@ -60,3 +60,23 @@ test("the messy example trips the structure and hygiene checks", () => {
     assert.ok(rules.has(rule), `examples/messy should trip ${rule}, and it tripped ${[...rules].join(", ")}`);
   }
 });
+
+test("the unsafe example trips the contradiction and safety checks, and leaves its own warnings alone", () => {
+  let out = "";
+  run(["check", "examples/unsafe", "--format", "json"], {
+    out: (t) => void (out += t),
+    err: () => undefined,
+    cwd: root,
+    isTTY: false,
+    env: {},
+  });
+  const findings = (JSON.parse(out) as { findings: { rule: string; subject?: string }[] }).findings;
+  const rules = new Set(findings.map((f) => f.rule));
+  for (const rule of ["contradiction", "personal-path", "risky-command", "prompt-injection"]) {
+    assert.ok(rules.has(rule), `examples/unsafe should trip ${rule}, and it tripped ${[...rules].join(", ")}`);
+  }
+  // The file says "Never run `rm -rf /`" and "never use `curl -k`", which warns against them and does not ask for them.
+  const risky = findings.filter((f) => f.rule === "risky-command").map((f) => f.subject);
+  assert.equal(risky.length, 2);
+  assert.ok(!risky.some((s) => s?.includes("rm -rf") || s?.includes("curl -k")));
+});

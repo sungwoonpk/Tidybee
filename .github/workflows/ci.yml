@@ -76,6 +76,19 @@ jobs:
             grep -q "$rule" messy.txt
           done
 
+      - name: The compiled command finds the contradictions and the unsafe advice in the unsafe example
+        run: |
+          node dist/src/cli.js check examples/unsafe > unsafe.txt
+          cat unsafe.txt
+          for rule in contradiction personal-path risky-command prompt-injection; do
+            grep -q "$rule" unsafe.txt
+          done
+          # What the file only warns against is not reported. "! grep" would not stop the step, so this is an "if".
+          if grep -q "rm -rf" unsafe.txt; then
+            echo "a warning against rm -rf was reported as advice"
+            exit 1
+          fi
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
