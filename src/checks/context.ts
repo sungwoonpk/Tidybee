@@ -22,7 +22,9 @@ export function headingAbove(doc: Doc, line: number): string | null {
  * before the code block it is in, and the heading of its section.
  */
 export function warnedAgainst(doc: Doc, line: number, fenceStart?: number): boolean {
-  const pick = (l: number): string => doc.md.lines[l - 1] ?? "";
+  // A flag is not a warning: --insecure is the command being asked for. Long lines are cut, since they hold data.
+  const pick = (l: number): string =>
+    (doc.md.lines[l - 1] ?? "").slice(0, 2000).replace(/(?<!\w)--?[A-Za-z][\w-]*/g, " ");
   const lines = [line, line - 1, line - 2];
   if (fenceStart !== undefined) lines.push(fenceStart - 1, fenceStart - 2);
   const heading = headingAbove(doc, line);
