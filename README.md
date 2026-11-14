@@ -3,7 +3,7 @@
 [![CI](https://github.com/sungwoonpk/Tidybee/actions/workflows/ci.yml/badge.svg)](https://github.com/sungwoonpk/Tidybee/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/sungwoonpk/Tidybee/actions/workflows/codeql.yml/badge.svg)](https://github.com/sungwoonpk/Tidybee/actions/workflows/codeql.yml)
 
-A doctor for the files that coding agents read: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, Cursor, Windsurf, Cline and Copilot rules, and Claude skills. It checks that every path, link, import and command they mention is still there, tells you which commit removed or renamed what is gone, and says how many tokens they cost at the start of every session.
+A doctor for the files that coding agents read: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, Cursor, Windsurf, Cline and Copilot rules, and Claude skills. It checks that every path, link, import and command they mention is still there, tells you which commit removed or renamed what is gone, finds rules that contradict each other, keys, hidden text and risky advice, and says how many tokens they cost at the start of every session.
 
 TypeScript, no runtime dependencies, read-only. It is meant to be run on repositories you did not write.
 
@@ -32,6 +32,8 @@ An instruction file is written once and then the code moves on. The agent trusts
 | It says `npm run lint` and there is no such script         | Checks every script, make target and recipe against the repository     |
 | It says `npm`, the repository uses `pnpm`                  | Compares with the lockfile                                             |
 | A link or an `@import` points at a document that was moved | Checks files and headings                                              |
+| One file says tabs and another says spaces                 | Finds rules that say the opposite, in files an agent reads together    |
+| A key was pasted in, or text is hidden where nobody looks  | Finds keys, invisible characters, and hidden comments that give orders |
 | The files grow, and every session pays for them in tokens  | Counts the tokens read at the start of every session                   |
 | A checker that is often wrong gets switched off            | Every finding has a confidence. The unsure ones are hidden and counted |
 
@@ -41,6 +43,7 @@ An instruction file is written once and then the code moves on. The agent trusts
 - **Finds copies that drifted.** `CLAUDE.md` and `AGENTS.md` often start as one text and end as two. Tidybee says how far they have moved apart.
 - **Evidence from Git.** A missing path that Git remembers being deleted or renamed is a certain error, and says where it went.
 - **Honest about doubt.** Findings are `high`, `medium` or `low` confidence, and `low` ones need `--all`.
+- **Never prints a secret,** and never lets text from a repository change what your terminal shows. See [decision 0006](docs/decisions/0006-safety-findings-never-print-secrets.md).
 - **Safe on other people's code.** It only reads. It never runs a script from the repository, and it runs Git with the setting that lets a repository run a program turned off.
 - **Checked on real repositories,** not only on tests. See [development](docs/development.md).
 
@@ -80,6 +83,10 @@ Exit codes: `0` when nothing at or above `--fail-on` was found, `1` when somethi
 | `rule-header`                                            | Bad headers in Cursor, Copilot and Windsurf rules, skills and agents       |
 | `drifting-files`, `identical-files`, `duplicate-content` | The same instructions in several files, and copies that drifted            |
 | `file-size`, `filler`, `todo-marker` and others          | Files that are too large, generic advice, unfinished parts, empty sections |
+| `contradiction`                                          | Opposite rules about indentation, quotes, the package manager, committing  |
+| `secret`, `personal-path`                                | A pasted key, and a path on one person's computer                          |
+| `invisible-text`, `prompt-injection`                     | Hidden characters, and orders hidden in a comment                          |
+| `risky-command`                                          | `curl \| sh`, skipped permission prompts, `curl -k`, `rm -rf /`            |
 
 How each one works, and what it leaves alone on purpose, is in [docs/checks.md](docs/checks.md).
 
@@ -104,4 +111,4 @@ CI runs the same on Node 22 and 24, builds the command and runs it on the exampl
 
 ## Status
 
-It reads and checks, and does not fix anything yet. Contradicting rules, secrets, configuration, fixing and syncing are planned and listed in [docs/limits.md](docs/limits.md). It has had no independent security review.
+It reads and checks, and does not fix anything yet. Configuration, SARIF and a GitHub Action, fixing and syncing are planned and listed in [docs/limits.md](docs/limits.md). The contradiction check reads few sentences on purpose, and the secret check is not a secret scanner. It has had no independent security review.
