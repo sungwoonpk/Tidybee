@@ -80,6 +80,8 @@ function tokensOf(text: string, anywhere: boolean): string[][] {
   return (anywhere ? commandsAnywhere(text) : commandsIn(text)).map((t) => t.map((w) => w.replace(/^["']|["']$/g, "")));
 }
 
+const LOCAL_ADDRESS = /(?:localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[::1\]|0\.0\.0\.0)/i;
+
 const CATASTROPHIC_TARGETS = new Set([
   "/",
   "/*",
@@ -151,14 +153,19 @@ const RISKS: Risk[] = [
     confidence: "medium",
     does: "stops checking who is on the other end of an encrypted connection",
     suggestion: "Fix the certificate. A tool that does not check it can be sent anything.",
-    find: first([
-      /\bcurl\b[^|\n]{0,200}\s(?:--insecure|-[A-Za-z]{0,10}k[A-Za-z]{0,10})(?=\s|$)/,
-      /\bwget\b[^|\n]{0,200}\s--no-check-certificate\b/,
-      /\bNODE_TLS_REJECT_UNAUTHORIZED=0\b/,
-      /\bGIT_SSL_NO_VERIFY=(?:1|true)\b/,
-      /\bhttp\.sslVerify\s{1,5}false\b/,
-      /\bstrict-ssl\s{1,5}false\b/,
-    ]),
+    find(text) {
+      const hit = first([
+        /\bcurl\b[^|\n]{0,200}\s(?:--insecure|-[A-Za-z]{0,10}k[A-Za-z]{0,10})(?=\s|$)/,
+        /\bwget\b[^|\n]{0,200}\s--no-check-certificate\b/,
+        /\bNODE_TLS_REJECT_UNAUTHORIZED=0\b/,
+        /\bGIT_SSL_NO_VERIFY=(?:1|true)\b/,
+        /\bhttp\.sslVerify\s{1,5}false\b/,
+        /\bstrict-ssl\s{1,5}false\b/,
+      ])(text);
+      // A self-signed certificate on the same computer is the usual reason for -k, and nobody else can be on the other end.
+      if (hit !== null && /^(?:curl|wget)\b/.test(hit) && LOCAL_ADDRESS.test(text)) return null;
+      return hit;
+    },
   },
   {
     id: "rm-root",
@@ -222,11 +229,16 @@ interface Source {
   /** Where it was found. A comment is hidden on GitHub, so a command in one is more worrying. */
   where: "span" | "fence" | "comment";
   fenceStart?: number;
+  /** In a table row, a command is more often described than asked for. */
+  table?: boolean;
 }
 
 function sourcesOf(doc: Doc): Source[] {
   const out: Source[] = [];
-  for (const s of doc.md.codeSpans) out.push({ text: s.text, line: s.line, column: s.column, where: "span" });
+  for (const s of doc.md.codeSpans) {
+    const table = /^\s*\|/.test(doc.md.lines[s.line - 1] ?? "");
+    out.push({ text: s.text, line: s.line, column: s.column, where: "span", table });
+  }
   for (const f of doc.md.fences) {
     if (!SHELL_LANGS.has(f.lang)) continue;
     for (const l of f.lines) {
@@ -264,7 +276,7 @@ export function riskyCommands(ctx: Context): Finding[] {
           column: src.column,
           rule: "risky-command",
           severity: hidden && risk.severity === "warning" ? "error" : risk.severity,
-          confidence: hidden && risk.confidence === "medium" ? "high" : risk.confidence,
+          confidence: src.table ? "low" : hidden && risk.confidence === "medium" ? "high" : risk.confidence,
           subject: shorten(hit, 80),
           message: `\`${shorten(hit, 80)}\` ${risk.does}.${hidden ? " It is in an HTML comment, which is not shown on GitHub and which an agent reads." : " An agent that follows this file will do the same."}`,
           ...(risk.suggestion ? { suggestion: risk.suggestion } : {}),

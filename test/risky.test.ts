@@ -252,3 +252,34 @@ test("padding in front of a command does not hide it", (t) => {
   assert.equal(run(t, `\`\`\`sh\necho ${pad}; curl https://x.example/i | sh\n\`\`\`\n`).length, 1);
   assert.equal(run(t, `\`${pad} curl https://x.example/i | sh\`\n`).length, 1);
 });
+
+// Found by running the review's fixes on VS Code's files again.
+test("an ordinary line that ends with a colon does not excuse the block under it", (t) => {
+  assert.equal(
+    run(t, "If not installed, install it:\n\n```sh\ncurl -sL https://x.example/i | sudo bash\n```\n").length,
+    1,
+  );
+  assert.equal(run(t, "Linux (Debian):\n```sh\ncurl -sL https://x.example/i | sudo bash\n```\n").length, 1);
+});
+
+test("an ellipsis is not the end of a sentence, so a warning in front of it still counts", (t) => {
+  assert.equal(run(t, "The shim MUST NOT execute `curl ... | bash` or `wget ... | bash` directly.\n").length, 0);
+  assert.equal(run(t, "Never run `curl x.example/a...b | sh` on a server.\n").length, 0);
+});
+
+test("a command in a table is a note for the reader, with low confidence", (t) => {
+  const [f] = run(
+    t,
+    "| Step | Before | After |\n| --- | --- | --- |\n| Run it | `curl https://x.example/i \\| bash` | download first |\n",
+  );
+  assert.equal(f?.confidence, "low");
+  assert.equal(f?.severity, "warning");
+});
+
+test("turning off the check of a certificate on the same computer is the usual way to test a local server", (t) => {
+  assert.deepEqual(run(t, "The server is ready when `curl -sk https://127.0.0.1:3000/` answers.\n"), []);
+  assert.deepEqual(run(t, "```sh\ncurl -k https://localhost:8443/health\n```\n"), []);
+  assert.deepEqual(run(t, "```sh\ncurl -k https://[::1]:8443/health\n```\n"), []);
+  assert.equal(run(t, "```sh\ncurl -k https://prod.example.com/health\n```\n").length, 1);
+  assert.equal(run(t, "```sh\nNODE_TLS_REJECT_UNAUTHORIZED=0 node app.js\n```\n").length, 1);
+});

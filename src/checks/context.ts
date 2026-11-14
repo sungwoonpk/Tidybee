@@ -42,13 +42,11 @@ function clean(text: string): string {
 
 /** The part of a line before the command, back to the start of the sentence the command is in. */
 function clauseBefore(before: string): string {
-  const cut = Math.max(
-    before.lastIndexOf(". "),
-    before.lastIndexOf("! "),
-    before.lastIndexOf("? "),
-    before.lastIndexOf("; "),
-  );
-  return before.slice(cut + 1);
+  // The end of a sentence is a full stop and a space that is not the end of an ellipsis ("curl ... | sh").
+  const tail = before.slice(-2000);
+  let start = 0;
+  for (const m of tail.matchAll(/(?<![.\s])[.!?;]\s/g)) start = (m.index ?? 0) + 1;
+  return tail.slice(start);
 }
 
 /**
@@ -69,7 +67,8 @@ function warnedAbove(doc: Doc, above: number, current: string): boolean {
     const label = isLabel(text);
     const sibling = LIST_ITEM.test(current) && LIST_ITEM.test(text) && !label;
     if (sibling || (crossedBlank && !label)) continue;
-    if (NEGATION.test(clean(text)) || label) return true;
+    // Being a label only lets the line speak for what follows. It has to be a warning to excuse it: "If not installed:" is not.
+    if (NEGATION.test(clean(text)) || LABEL.test(text.trim())) return true;
   }
   return false;
 }
