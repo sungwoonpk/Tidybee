@@ -35,8 +35,20 @@ interface Topic {
 // ---- reading a statement ---------------------------------------------------------------------------------------------
 
 /** Words that turn the next few words around: "not npm", "never use tabs", "instead of jest", "pnpm over npm". */
-const TURNS =
-  /\b(?:no|not|never|don'?t|do not|dont|avoid|without|stop using|skip|drop|omit|instead of|rather than|over|like|unlike|similar to|such as|as in|compared (?:to|with))\s+(?:[\w-]+\s+){0,2}$/;
+const TURN_WORDS =
+  /\b(?:no|not|never|don'?t|do not|dont|avoid|without|stop using|skip|drop|omit|instead of|rather than|over|like|unlike|similar to|such as|as in|compared (?:to|with))\b/g;
+/** "Don't forget trailing commas" asks for them. It is a negation that is not one. */
+const FORGET = /\b(?:don'?t|do not|never) (?:forget|neglect|fail)(?: to)?\b/g;
+
+/**
+ * True when the phrase at `index` is turned around by the words just before it. Turned twice it is not turned: "never omit
+ * semicolons" and "don't skip trailing commas" say to do it.
+ */
+function turned(text: string, index: number): boolean {
+  const before = text.slice(Math.max(0, index - 40), index).replace(FORGET, " ");
+  const near = before.split(/\s+/).filter(Boolean).slice(-4).join(" ");
+  return (near.match(TURN_WORDS)?.length ?? 0) % 2 === 1;
+}
 
 /** Words that make a statement conditional, and so possibly an exception. */
 const CONDITION =
@@ -47,7 +59,7 @@ const ASKING =
 
 /** A statement that tells the agent what to do, and does not only say what is: it starts with an instruction or has a "must" in it. */
 const INSTRUCTION_START =
-  /^(?:(?:please|always|never|also|then)\s+)*(?:use|using|prefer|avoid|keep|write|format|indent|follow|ensure|commit|push|ask|add|run|test|stick|go|install|make|do not|don'?t|no|only)\b/;
+  /^(?:(?:please|always|never|also|then)\s+)*(?:use|using|prefer|avoid|keep|write|format|indent|follow|ensure|commit|push|ask|add|run|test|stick|go|install|make|omit|skip|drop|leave|end|put|include|require|enable|disable|do not|don'?t|no|only)\b/;
 const MODAL = /\b(?:must|should|shall|always|never|required?|do not|don'?t|dont|avoid|prefer)\b/;
 
 function isInstruction(text: string): boolean {
@@ -76,7 +88,7 @@ interface Hit {
 function hit(text: string, re: RegExp): Hit | null {
   const m = re.exec(text);
   if (!m) return null;
-  return { index: m.index, turned: TURNS.test(text.slice(Math.max(0, m.index - 40), m.index)) };
+  return { index: m.index, turned: turned(text, m.index) };
 }
 
 /** Two phrases that are each other's opposite. "Not A" says B. A statement that names both compares them and says nothing. */
@@ -383,11 +395,16 @@ function statementClaims(doc: Doc, out: Claim[]): void {
   }
 }
 
-/** The package manager each statement and each command asks for, where no lockfile has already settled it. */
+/**
+ * The package manager each statement and each command asks for, where no lockfile has already settled it. Managers named
+ * together are alternatives: a line, a sentence or a block of commands that names two of them is a list of ways to do one
+ * thing, and says nothing against itself.
+ */
 function managerClaims(doc: Doc, ctx: Context, out: Claim[]): void {
   if (ctx.project.managerFor(doc.file.dir) !== undefined) return; // package-manager reports a mismatch with the lockfile
-  const push = (side: string, line: number, scope: Scope): void => {
-    out.push({ topic: PACKAGE_MANAGER, side, doc, line, scope });
+  const found: { claim: Claim; block: string }[] = [];
+  const push = (side: string, line: number, scope: Scope, block: string): void => {
+    found.push({ claim: { topic: PACKAGE_MANAGER, side, doc, line, scope }, block });
   };
   for (const s of doc.md.statements) {
     const text = plain(s.text);
@@ -400,9 +417,9 @@ function managerClaims(doc: Doc, ctx: Context, out: Claim[]): void {
     )
       continue;
     const side = choice(text, USE_MANAGERS);
-    if (side) push(side, s.line, scopeOf([text, plain(headingAbove(doc, s.line) ?? "")]));
+    if (side) push(side, s.line, scopeOf([text, plain(headingAbove(doc, s.line) ?? "")]), `line ${s.line}`);
   }
-  const fromCommand = (text: string, line: number, fenceStart?: number): void => {
+  const fromCommand = (text: string, line: number, block: string, fenceStart?: number, cwd = ""): void => {
     if (/<[^>\s]*>/.test(text) || warnedAgainst(doc, line, fenceStart)) return;
     const heading = plain(headingAbove(doc, line) ?? "");
     for (const [program = "", ...args] of commandsIn(text)) {
@@ -410,14 +427,26 @@ function managerClaims(doc: Doc, ctx: Context, out: Claim[]): void {
       if (!manager || args.includes("-g") || args.includes("--global") || args.some((a) => SCOPING.test(a))) continue;
       const word = args.find((a) => !a.startsWith("-"));
       if (word === undefined || !USED_FOR.has(word)) continue;
-      push(manager, line, scopeOf([heading], [plain(text)]));
+      const scope = scopeOf([heading], [plain(text)]);
+      if (cwd !== "") scope.places.push(`cd ${cwd}`);
+      push(manager, line, scope, block);
     }
   };
-  for (const span of doc.md.codeSpans) fromCommand(span.text, span.line);
+  for (const span of doc.md.codeSpans) fromCommand(span.text, span.line, `line ${span.line}`);
   for (const f of doc.md.fences) {
     if (!SHELL_LANGS.has(f.lang)) continue;
-    for (const l of f.lines) if (!l.text.trimStart().startsWith("#")) fromCommand(l.text, l.line, f.startLine);
+    // A "cd" on a line of its own puts the commands after it in that folder.
+    let cwd = "";
+    for (const l of f.lines) {
+      if (l.text.trimStart().startsWith("#")) continue;
+      const cd = /^\s*cd\s+([\w./-]{1,100})\s*$/.exec(l.text);
+      if (cd) cwd = /^(?:\.\.?|-|~)$/.test(cd[1] as string) ? "" : (cd[1] as string);
+      fromCommand(l.text, l.line, `block ${f.startLine}`, f.startLine, cwd);
+    }
   }
+  const managersIn = new Map<string, Set<string>>();
+  for (const { claim, block } of found) managersIn.set(block, (managersIn.get(block) ?? new Set()).add(claim.side));
+  for (const { claim, block } of found) if ((managersIn.get(block) as Set<string>).size < 2) out.push(claim);
 }
 
 function where(a: Claim, from: Claim): string {

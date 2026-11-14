@@ -1,5 +1,5 @@
 import type { Context, Doc } from "../analyze.js";
-import { shorten } from "../text.js";
+import { shorten, windowsOf } from "../text.js";
 import type { Finding } from "../types.js";
 import { commandsIn } from "./commands.js";
 import { warnedAgainst } from "./context.js";
@@ -8,8 +8,6 @@ import { warnedAgainst } from "./context.js";
 // shell blocks and in HTML comments are read, the places where an agent finds a command to run. A file that says
 // "never run `curl | sh`" warns against the command, and the checks leave it alone: see warnedAgainst.
 
-/** A line is read to this length, so that a very long one cannot make a search slow. */
-const MAX_LINE = 5000;
 const SHELL_LANGS = new Set([
   "",
   "sh",
@@ -35,8 +33,8 @@ interface Risk {
   /** What it does, in a clause that follows "a command that". */
   does: string;
   suggestion?: string;
-  /** The matched text, or null when the line is fine. */
-  find(text: string): string | null;
+  /** The matched text, or null when the line is fine. `anywhere` is true for a comment, where a command is not at the start of the text. */
+  find(text: string, anywhere: boolean): string | null;
 }
 
 function first(res: RegExp[]): (text: string) => string | null {
@@ -50,10 +48,36 @@ function first(res: RegExp[]): (text: string) => string | null {
 }
 
 const DOWNLOADERS = "(?:curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod)";
-const INTERPRETERS = "(?:(?:ba|z|da|k|c|fi)?sh|python3?|perl|ruby|node|php|iex|invoke-expression)";
+const SHELLS = "(?:(?:ba|z|da|k|c|fi)?sh|iex|invoke-expression)";
+const ANY_INTERPRETER = "(?:(?:ba|z|da|k|c|fi)?sh|python3?|perl|ruby|node|php|iex|invoke-expression)";
+const SUDO = "(?:sudo\\s{1,5}(?:-\\S{1,20}\\s{1,5}){0,3})?";
 
-function tokensOf(text: string): string[][] {
-  return commandsIn(text).map((t) => t.map((w) => w.replace(/^["']|["']$/g, "")));
+const PROGRAMS = new Set(["rm", "chmod", "git"]);
+
+/**
+ * The commands of a comment, which is prose with a command somewhere in it: from each program that is one of ours to the
+ * next separator. A command line starts with its program, a comment does not.
+ */
+function commandsAnywhere(text: string): string[][] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const out: string[][] = [];
+  for (let i = 0; i < words.length; i++) {
+    if (!PROGRAMS.has(words[i] as string)) continue;
+    const command = [words[i] as string];
+    for (let j = i + 1; j < words.length && command.length < 30; j++) {
+      const word = words[j] as string;
+      const stop = /[;|&]+$/.test(word);
+      const bare = word.replace(/[;|&]+$/, "");
+      if (bare !== "") command.push(bare);
+      if (stop) break;
+    }
+    out.push(command);
+  }
+  return out;
+}
+
+function tokensOf(text: string, anywhere: boolean): string[][] {
+  return (anywhere ? commandsAnywhere(text) : commandsIn(text)).map((t) => t.map((w) => w.replace(/^["']|["']$/g, "")));
 }
 
 const CATASTROPHIC_TARGETS = new Set([
@@ -78,8 +102,11 @@ const RISKS: Risk[] = [
     does: "runs a script from the network without anyone reading it",
     suggestion: "Download it, read it, and pin a version or a checksum.",
     find: first([
+      new RegExp(`\\b${DOWNLOADERS}\\b[^|\\n]{0,300}\\|\\s{0,5}${SUDO}${SHELLS}\\b`, "i"),
+      // An interpreter runs what it is given only when it is given nothing else to run: "| python3" and "| node -", and
+      // not "| python3 -m json.tool" or "| node -e 'code'".
       new RegExp(
-        `\\b${DOWNLOADERS}\\b[^|\\n]{0,300}\\|\\s{0,5}(?:sudo\\s{1,5}(?:-\\S{1,20}\\s{1,5}){0,3})?${INTERPRETERS}\\b`,
+        `\\b${DOWNLOADERS}\\b[^|\\n]{0,300}\\|\\s{0,5}${SUDO}(?:python3?|perl|ruby|node|php)(?:\\s{1,5}-)?\\s{0,5}(?=$|[;&|)"'\`])`,
         "i",
       ),
       new RegExp(
@@ -98,7 +125,7 @@ const RISKS: Risk[] = [
     suggestion: "Nothing legitimate is written this way. Find out who added it.",
     find: first([
       new RegExp(
-        `\\bbase64\\s{1,5}(?:-d|--decode|-D)\\b[^|\\n]{0,60}\\|\\s{0,5}(?:sudo\\s{1,5})?${INTERPRETERS}\\b`,
+        `\\bbase64\\s{1,5}(?:-d|--decode|-D)\\b[^|\\n]{0,60}\\|\\s{0,5}(?:sudo\\s{1,5})?${ANY_INTERPRETER}\\b`,
         "i",
       ),
     ]),
@@ -138,8 +165,8 @@ const RISKS: Risk[] = [
     severity: "warning",
     confidence: "medium",
     does: "deletes a whole computer's files or a whole home folder",
-    find(text) {
-      for (const [program, ...args] of tokensOf(text)) {
+    find(text, anywhere) {
+      for (const [program, ...args] of tokensOf(text, anywhere)) {
         if (program !== "rm") continue;
         const recursive = args.some((a) => a === "--recursive" || /^-[A-Za-z]*[rR]/.test(a));
         if (recursive && args.some((a) => CATASTROPHIC_TARGETS.has(a))) return [program, ...args].join(" ");
@@ -152,8 +179,8 @@ const RISKS: Risk[] = [
     severity: "info",
     confidence: "low",
     does: "lets every user on the computer change a file",
-    find(text) {
-      for (const [program, ...args] of tokensOf(text)) {
+    find(text, anywhere) {
+      for (const [program, ...args] of tokensOf(text, anywhere)) {
         if (program === "chmod" && args.some((a) => a === "777" || a === "0777" || a === "a+rwx"))
           return [program, ...args].join(" ");
       }
@@ -166,8 +193,8 @@ const RISKS: Risk[] = [
     confidence: "low",
     does: "overwrites commits that other people may have built on",
     suggestion: "`git push --force-with-lease` refuses when someone else has pushed.",
-    find(text) {
-      for (const [program, ...args] of tokensOf(text)) {
+    find(text, anywhere) {
+      for (const [program, ...args] of tokensOf(text, anywhere)) {
         if (program === "git" && args.includes("push") && args.some((a) => a === "--force" || a === "-f"))
           return [program, ...args].join(" ");
       }
@@ -179,8 +206,8 @@ const RISKS: Risk[] = [
     severity: "info",
     confidence: "low",
     does: "skips the checks that the repository runs before a commit or a push",
-    find(text) {
-      for (const [program, ...args] of tokensOf(text)) {
+    find(text, anywhere) {
+      for (const [program, ...args] of tokensOf(text, anywhere)) {
         if (program === "git" && args.includes("--no-verify")) return [program, ...args].join(" ");
       }
       return null;
@@ -216,15 +243,21 @@ export function riskyCommands(ctx: Context): Finding[] {
   for (const doc of ctx.docs) {
     const seen = new Set<string>();
     for (const src of sourcesOf(doc)) {
-      const text = src.text.slice(0, MAX_LINE);
+      const hidden = src.where === "comment";
+      // A long line is read window by window, so that padding in front of a command does not hide it.
+      const windows = windowsOf(src.text);
       for (const risk of RISKS) {
         const key = `${src.line}:${risk.id}`;
         if (seen.has(key)) continue;
-        const hit = risk.find(text);
+        let hit: string | null = null;
+        for (const w of windows) {
+          hit = risk.find(w, hidden);
+          if (hit !== null) break;
+        }
         if (hit === null) continue;
-        if (warnedAgainst(doc, src.line, src.fenceStart, hit)) continue;
+        // A comment is where an attack hides, so a warning near a command in one is not taken for the file's own.
+        if (!hidden && warnedAgainst(doc, src.line, src.fenceStart, hit)) continue;
         seen.add(key);
-        const hidden = src.where === "comment";
         out.push({
           file: doc.file.path,
           line: src.line,

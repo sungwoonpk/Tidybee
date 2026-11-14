@@ -71,3 +71,15 @@ export function shorten(text: string, max = 80): string {
   const chars = [...text];
   return chars.length <= max ? text : `${chars.slice(0, max - 1).join("")}…`;
 }
+
+/**
+ * Cuts text into windows of `size` characters that overlap by `overlap`, so that a pattern shorter than the overlap is whole
+ * in one of them. A check that reads a long line reads it window by window, and a pattern has a bounded cost in each. At
+ * most `max` windows are made.
+ */
+export function windowsOf(text: string, size = 5000, overlap = 500, max = 400): string[] {
+  if (text.length <= size) return [text];
+  const out: string[] = [];
+  for (let i = 0; i < text.length && out.length < max; i += size - overlap) out.push(text.slice(i, i + size));
+  return out;
+}

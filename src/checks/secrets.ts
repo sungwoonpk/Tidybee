@@ -5,9 +5,6 @@ import type { Finding } from "../types.js";
 // Secrets and personal paths in files that are committed, read by every agent, and often pasted into a chat. A finding
 // never prints the secret: the report goes into logs and code scanning, and a secret that is shown there has leaked again.
 
-/** A line is read to this length. Real secrets are short, and a longer line is data, not an instruction. */
-const MAX_LINE = 20_000;
-
 interface KnownFormat {
   name: string;
   re: RegExp;
@@ -98,10 +95,10 @@ function secretsIn(doc: Doc): Finding[] {
   const out: Finding[] = [];
   const lines = doc.md.lines;
   for (let li = 0; li < lines.length; li++) {
-    const text = (lines[li] as string).slice(0, MAX_LINE);
+    const text = lines[li] as string;
     if (text.length < 12) continue;
     const base = { file: doc.file.path, line: li + 1 };
-    let found = false;
+    const taken: [number, number][] = [];
     const add = (
       column: number,
       what: string,
@@ -109,7 +106,7 @@ function secretsIn(doc: Doc): Finding[] {
       severity: Finding["severity"],
       confidence: Finding["confidence"],
     ): void => {
-      found = true;
+      taken.push([column, column + secret.length]);
       out.push({
         ...base,
         column: column + 1,
@@ -149,25 +146,17 @@ function secretsIn(doc: Doc): Finding[] {
           "medium",
         );
     }
-    if (found) continue; // the name of a key next to the key is the same finding
     for (const m of text.matchAll(ASSIGNMENT)) {
       const value = m[1] as string;
-      if (
-        UUID.test(value) ||
-        looksLikeName(value) ||
-        !/\d/.test(value) ||
-        !/[A-Za-z]/.test(value) ||
-        !looksRandom(value, 3.3)
-      )
-        continue;
+      const start = (m.index ?? 0) + m[0].length - value.length;
+      // The name of a key next to the key is the same finding, and a second secret on the line is another.
+      if (taken.some(([from, to]) => start < to && start + value.length > from)) continue;
+      if (UUID.test(value) || looksLikeName(value) || !/[A-Za-z]/.test(value) || !looksRandom(value, 3.3)) continue;
+      // A digit, or mixed case that is random enough to be no words: "CorrectHorseBatteryStaple" is a phrase.
+      const mixed = /[a-z]/.test(value) && /[A-Z]/.test(value) && entropy(value) >= 4;
+      if (!/\d/.test(value) && !mixed) continue;
       const strong = value.length >= 20 && entropy(value) >= 3.7;
-      add(
-        (m.index ?? 0) + m[0].length - value.length,
-        "a secret that is assigned to a name",
-        value,
-        "warning",
-        strong ? "medium" : "low",
-      );
+      add(start, "a secret that is assigned to a name", value, "warning", strong ? "medium" : "low");
     }
   }
   return out;
@@ -187,7 +176,7 @@ function personalPathsIn(doc: Doc): Finding[] {
   const out: Finding[] = [];
   const lines = doc.md.lines;
   for (let li = 0; li < lines.length; li++) {
-    const text = (lines[li] as string).slice(0, MAX_LINE);
+    const text = lines[li] as string;
     if (!text.includes("Users") && !text.includes("/home/")) continue;
     const add = (index: number, length: number, name: string, confidence: Finding["confidence"]): void => {
       if (GENERIC_USERS.has(name.toLowerCase())) return;
