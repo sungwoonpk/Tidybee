@@ -191,7 +191,8 @@ function personalPathsIn(doc: Doc): Finding[] {
     if (!text.includes("Users") && !text.includes("/home/")) continue;
     const add = (index: number, length: number, name: string, confidence: Finding["confidence"]): void => {
       if (GENERIC_USERS.has(name.toLowerCase())) return;
-      const path = text.slice(index, index + length + 30).split(/[\s`"'<>)]/)[0] as string;
+      // The path runs to the next space or quote, and a path longer than 200 characters is shown up to there.
+      const path = text.slice(index, index + Math.max(length, 200)).split(/[\s`"'<>)]/)[0] as string;
       out.push({
         file: doc.file.path,
         line: li + 1,
