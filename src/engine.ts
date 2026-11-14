@@ -1,5 +1,6 @@
 import { type Context, alwaysTokens, buildContext } from "./analyze.js";
 import { staleCommands } from "./checks/commands.js";
+import { contradictions } from "./checks/contradictions.js";
 import { duplication } from "./checks/duplication.js";
 import { headers } from "./checks/headers.js";
 import { hiddenText } from "./checks/hidden.js";
@@ -49,6 +50,7 @@ export const CHECKS: ((ctx: Context) => Finding[])[] = [
   headers,
   duplication,
   quality,
+  contradictions,
   hiddenText,
   secrets,
   riskyCommands,
