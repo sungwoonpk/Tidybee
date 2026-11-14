@@ -3,7 +3,11 @@ import { test } from "node:test";
 import { candidatesIn } from "../src/checks/refs.js";
 import { commandsIn } from "../src/checks/commands.js";
 import { parseTree } from "../src/checks/tree.js";
+import { hiddenText } from "../src/checks/hidden.js";
+import { riskyCommands } from "../src/checks/risky.js";
+import { secrets } from "../src/checks/secrets.js";
 import { parseMarkdown } from "../src/markdown.js";
+import { contextOf } from "./helpers.js";
 
 // Tidybee reads repositories that other people wrote, so a file made to make it hang must not be able to. Each of these
 // lines took many seconds, or never finished, with the first version of the reader, and each must now be quick.
@@ -52,6 +56,53 @@ quick("a tree with a very long line", () =>
 quick("a tree of many entries", () =>
   parseTree(Array.from({ length: 20_000 }, (_, i) => ({ text: `├── file${i}.ts`, line: i + 1 }))),
 );
+
+// The safety checks read every line of a file with regular expressions, so each is tried on a file made to be slow. The
+// file is read before the clock starts, since reading is not what is being timed.
+function slowCheck(name: string, text: string, check: (ctx: ReturnType<typeof contextOf>) => unknown): void {
+  test(`a hostile file does not hang the safety checks: ${name}`, (t) => {
+    const ctx = contextOf(t, text);
+    const start = performance.now();
+    check(ctx);
+    const ms = performance.now() - start;
+    assert.ok(ms < LIMIT_MS, `took ${Math.round(ms)} ms`);
+  });
+}
+
+const BIG = 1_500_000;
+/** The same text in the places where the risk check reads: in running text, in a shell block, in a comment and in a code span. */
+const everywhere = (text: string): string =>
+  `${text}\n\n\`\`\`sh\n${text}\n\`\`\`\n\n<!-- ${text} -->\n\n\`${text}\`\n`;
+for (const [name, unit] of [
+  ["many downloads", "curl a "],
+  ["prefixes of keys", "sk-ant-"],
+  ["the start of a token", "AKIA"],
+  ["names of secrets", "api_key="],
+  ["the start of a URL with a password", "a://a:b@"],
+  ["the start of a web token", "eyJ"],
+  ["home folders", "/Users/a/"],
+  ["the start of a webhook", "https://hooks.slack.com/services/T"],
+  ["flags", "curl -"],
+  ["shells", "| sh "],
+  ["many pipes to a shell", "curl a | "],
+  ["decoders", "base64 -d "],
+  ["private key headers", "-----BEGIN "],
+] as const) {
+  slowCheck(name, everywhere(unit.repeat(BIG / 4 / unit.length)), (c) => [
+    ...secrets(c),
+    ...riskyCommands(c),
+    ...hiddenText(c),
+  ]);
+}
+slowCheck("a long run of one key alphabet", `sk-${"a1".repeat(BIG / 2)}\n`, secrets);
+slowCheck("a long assignment", `token=${"aB3".repeat(BIG / 3)}\n`, secrets);
+slowCheck("a million zero-width characters", `a${String.fromCodePoint(0x200b).repeat(BIG)}\n`, hiddenText);
+slowCheck("a million tag characters", `a${String.fromCodePoint(0xe0041).repeat(BIG / 2)}\n`, hiddenText);
+slowCheck("a hundred thousand short lines of a command", "```sh\ncurl x | sh\n".repeat(50_000), riskyCommands);
+slowCheck("comments that never close", "<!-- curl x | sh ".repeat(BIG / 17), (c) => [
+  ...hiddenText(c),
+  ...riskyCommands(c),
+]);
 
 test("the odd input still gives sensible answers, not only fast ones", () => {
   assert.equal(parseMarkdown(`# a${" ".repeat(1000)}b\n`).headings[0]?.text, `a${" ".repeat(1000)}b`);
