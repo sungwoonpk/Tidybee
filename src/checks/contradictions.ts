@@ -90,7 +90,14 @@ const MANAGERS: [Manager, RegExp][] = [
   ["yarn", /\byarn\b/],
   ["bun", /\bbun\b/],
 ];
-const ABOUT_PACKAGES = /\b(?:install(?:ing|s)?|dependencies|package manager|run|scripts?|test|build|dev)\b/;
+// A statement chooses a package manager when it says to use one. "Run `npm publish`" names npm and chooses nothing.
+const USE_MANAGERS: [Manager, RegExp][] = [
+  ["npm", /\b(?:use|using|prefer|with|via)\s+(?:[\w-]+\s+)?npm\b/],
+  ["pnpm", /\b(?:use|using|prefer|with|via)\s+(?:[\w-]+\s+)?pnpm\b/],
+  ["yarn", /\b(?:use|using|prefer|with|via)\s+(?:[\w-]+\s+)?yarn\b/],
+  ["bun", /\b(?:use|using|prefer|with|via)\s+(?:[\w-]+\s+)?bun\b/],
+];
+const ABOUT_PACKAGES = /\b(?:install(?:ing|s)?|dependencies|packages?|package manager|scripts?)\b/;
 const COMMIT_AUTO =
   /\b(?:commit(?:ting)?|make commits?)\b[^.]{0,40}\b(?:automatically|after (?:each|every|any)|frequently|often|regularly|as you go|without (?:being )?(?:asked|asking))\b|\balways commit\b|\bcommit (?:early and often|after every)\b/;
 const COMMIT_ASK = [
@@ -353,7 +360,7 @@ function managerClaims(doc: Doc, ctx: Context, out: Claim[]): void {
   for (const s of doc.md.statements) {
     const text = plain(s.text);
     if (!ABOUT_PACKAGES.test(text) || CONDITION.test(text)) continue;
-    const side = choice(text, MANAGERS);
+    const side = choice(text, USE_MANAGERS);
     if (side) push(side, s.line, scopeOf([text, plain(headingAbove(doc, s.line) ?? "")]));
   }
   const fromCommand = (text: string, line: number, fenceStart?: number): void => {
