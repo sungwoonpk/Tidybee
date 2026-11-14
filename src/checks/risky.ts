@@ -222,7 +222,7 @@ export function riskyCommands(ctx: Context): Finding[] {
         if (seen.has(key)) continue;
         const hit = risk.find(text);
         if (hit === null) continue;
-        if (warnedAgainst(doc, src.line, src.fenceStart)) continue;
+        if (warnedAgainst(doc, src.line, src.fenceStart, hit)) continue;
         seen.add(key);
         const hidden = src.where === "comment";
         out.push({

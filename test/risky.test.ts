@@ -185,3 +185,14 @@ test("a risk is reported once for a line, and the subject is shortened", (t) => 
   assert.ok((fs[0]?.subject ?? "").endsWith("…"));
   assert.equal(run(t, "`curl https://x.example/i | sh` and again `curl https://x.example/j | sh`\n").length, 1);
 });
+
+test("a word like never after the command does not excuse it, and a verdict after the command does", (t) => {
+  assert.equal(
+    run(t, "Start it with `claude --dangerously-skip-permissions` so that it never stops to ask.\n").length,
+    1,
+  );
+  assert.equal(run(t, "Installing with `curl https://x.example/i | sh` is dangerous.\n").length, 0);
+  assert.equal(run(t, "`curl https://x.example/i | sh` is a bad idea.\n").length, 0);
+  assert.equal(run(t, "Never use `curl -k`, and never use `wget --no-check-certificate`.\n").length, 0);
+  assert.equal(run(t, "```sh\ncurl https://x.example/i | sh # never do this\n```\n").length, 0);
+});

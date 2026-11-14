@@ -341,7 +341,7 @@ function scopeKey(topic: Topic, scope: Scope): string {
 
 // ---- claims ----------------------------------------------------------------------------------------------------------
 
-interface Claim {
+export interface Claim {
   topic: Topic;
   side: string;
   doc: Doc;
@@ -424,12 +424,18 @@ function where(a: Claim, from: Claim): string {
   return a.doc.file.path === from.doc.file.path ? `line ${a.line}` : `line ${a.line} of \`${a.doc.file.path}\``;
 }
 
-export function contradictions(ctx: Context): Finding[] {
+/** Every side that a statement or a command takes on a topic, in every instruction file. Exported so that a test can see what was read. */
+export function claimsOf(ctx: Context): Claim[] {
   const claims: Claim[] = [];
   for (const doc of ctx.docs) {
     statementClaims(doc, claims);
     managerClaims(doc, ctx, claims);
   }
+  return claims;
+}
+
+export function contradictions(ctx: Context): Finding[] {
+  const claims = claimsOf(ctx);
   claims.sort((a, b) => a.doc.file.path.localeCompare(b.doc.file.path) || a.line - b.line);
 
   // Only the first claim of each side in each file is kept, since a second one says the same and adds nothing. That keeps
