@@ -349,6 +349,9 @@ interface Claim {
   scope: Scope;
 }
 
+/** The most claims compared for one topic and part of the project. A repository has a few sides to a topic, not thousands. */
+const MAX_CLAIMS = 2000;
+
 const READ_TOGETHER = new Set(["claude", "agents", "gemini", "conventions"]);
 
 /** True when an agent reads both files for the same work, so that a conflict between them is the agent's to resolve. */
@@ -429,32 +432,41 @@ export function contradictions(ctx: Context): Finding[] {
   }
   claims.sort((a, b) => a.doc.file.path.localeCompare(b.doc.file.path) || a.line - b.line);
 
+  // Only the first claim of each side in each file is kept, since a second one says the same and adds nothing. That keeps
+  // the comparison to a few claims for each topic, however many statements a file has.
+  const groups = new Map<string, Map<string, Claim>>();
+  for (const c of claims) {
+    const key = `${c.topic.id}|${scopeKey(c.topic, c.scope)}`;
+    const group = groups.get(key) ?? new Map<string, Claim>();
+    const first = `${c.side}\u0000${c.doc.file.path}`;
+    if (!group.has(first) && group.size < MAX_CLAIMS) group.set(first, c);
+    groups.set(key, group);
+  }
+
   const out: Finding[] = [];
-  const done = new Set<string>();
-  for (let j = 1; j < claims.length; j++) {
-    const b = claims[j] as Claim;
-    const key = `${b.topic.id}|${scopeKey(b.topic, b.scope)}`;
-    if (done.has(key)) continue;
-    for (let i = 0; i < j; i++) {
-      const a = claims[i] as Claim;
-      if (a.topic !== b.topic || scopeKey(a.topic, a.scope) !== scopeKey(b.topic, b.scope) || !together(a.doc, b.doc))
-        continue;
-      const differ = b.topic.conflicts ? b.topic.conflicts(a.side, b.side) : a.side !== b.side;
-      if (!differ) continue;
-      done.add(key);
-      const sure = a.doc.file.path === b.doc.file.path || (a.doc.load === "always" && b.doc.load === "always");
-      out.push({
-        file: b.doc.file.path,
-        line: b.line,
-        column: 1,
-        rule: "contradiction",
-        severity: "warning",
-        confidence: sure ? "medium" : "low",
-        subject: b.topic.name,
-        message: `This says to ${b.topic.asks(b.side)}, and ${where(a, b)} says to ${a.topic.asks(a.side)}. An agent that reads both has to choose, and will not always choose the same.`,
-        suggestion: "Decide which is right and delete the other, or say when each applies.",
-      });
-      break;
+  for (const group of groups.values()) {
+    const list = [...group.values()];
+    search: for (let j = 1; j < list.length; j++) {
+      const b = list[j] as Claim;
+      for (let i = 0; i < j; i++) {
+        const a = list[i] as Claim;
+        if (!together(a.doc, b.doc)) continue;
+        const differ = b.topic.conflicts ? b.topic.conflicts(a.side, b.side) : a.side !== b.side;
+        if (!differ) continue;
+        const sure = a.doc.file.path === b.doc.file.path || (a.doc.load === "always" && b.doc.load === "always");
+        out.push({
+          file: b.doc.file.path,
+          line: b.line,
+          column: 1,
+          rule: "contradiction",
+          severity: "warning",
+          confidence: sure ? "medium" : "low",
+          subject: b.topic.name,
+          message: `This says to ${b.topic.asks(b.side)}, and ${where(a, b)} says to ${a.topic.asks(a.side)}. An agent that reads both has to choose, and will not always choose the same.`,
+          suggestion: "Decide which is right and delete the other, or say when each applies.",
+        });
+        break search;
+      }
     }
   }
   return out;

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { candidatesIn } from "../src/checks/refs.js";
 import { commandsIn } from "../src/checks/commands.js";
 import { parseTree } from "../src/checks/tree.js";
+import { contradictions } from "../src/checks/contradictions.js";
 import { hiddenText } from "../src/checks/hidden.js";
 import { riskyCommands } from "../src/checks/risky.js";
 import { secrets } from "../src/checks/secrets.js";
@@ -103,6 +104,13 @@ slowCheck("comments that never close", "<!-- curl x | sh ".repeat(BIG / 17), (c)
   ...hiddenText(c),
   ...riskyCommands(c),
 ]);
+
+// The contradiction check compares claims with each other, so many claims on one topic must not make it quadratic.
+slowCheck("a hundred thousand statements about one topic", "Use tabs.\n\n".repeat(100_000), contradictions);
+slowCheck("a hundred thousand statements that do not disagree", "- Use 2 spaces.\n".repeat(120_000), contradictions);
+slowCheck("one huge statement", `Use tabs ${"and spaces ".repeat(150_000)}\n`, contradictions);
+slowCheck("many scope words", `${"in python in go in rust ".repeat(60_000)}use tabs\n`, contradictions);
+slowCheck("a statement made of the words the topics look for", `${"use not never ".repeat(100_000)}\n`, contradictions);
 
 test("the odd input still gives sensible answers, not only fast ones", () => {
   assert.equal(parseMarkdown(`# a${" ".repeat(1000)}b\n`).headings[0]?.text, `a${" ".repeat(1000)}b`);
