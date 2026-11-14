@@ -16,13 +16,16 @@ export function hiddenKind(cp: number): Hidden | null {
   if (cp < 0x20) return cp === 0x09 || cp === 0x0a || cp === 0x0d ? null : "control";
   if (cp < 0x7f) return null;
   if (cp <= 0x9f) return "control";
+  // Soft hyphen, combining grapheme joiner, Arabic letter mark, and the Hangul fillers: all draw nothing.
+  if (cp === 0xad || cp === 0x34f || cp === 0x115f || cp === 0x1160) return "zero-width";
+  if (cp === 0x61c) return "bidi";
   if (cp < 0x180e) return null;
   if (cp === 0x180e || cp === 0x200b || (cp >= 0x2060 && cp <= 0x2064) || cp === 0xfeff) return "zero-width";
   if (cp === 0x3164 || cp === 0xffa0 || (cp >= 0xfff9 && cp <= 0xfffb)) return "zero-width";
   if (cp === 0x200c || cp === 0x200d) return "joiner";
   if (cp === 0x200e || cp === 0x200f || cp === 0x2028 || cp === 0x2029) return "mark";
   if ((cp >= 0x202a && cp <= 0x202e) || (cp >= 0x2066 && cp <= 0x2069)) return "bidi";
-  if (cp === 0x206a || cp === 0x206b || cp === 0x206c || cp === 0x206d || cp === 0x206e || cp === 0x206f) return "bidi";
+  if (cp >= 0x206a && cp <= 0x206f) return "bidi";
   if (cp >= 0xe0000 && cp <= 0xe007f) return "tag";
   if (cp >= 0xe0100 && cp <= 0xe01ef) return "variation";
   return null;

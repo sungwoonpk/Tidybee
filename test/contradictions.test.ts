@@ -202,3 +202,22 @@ test("a tool named as a comparison is not the tool chosen", (t) => {
   assert.deepEqual(one(t, "Write tests with Mocha.\n\nUse snapshots like Jest does.\n"), []);
   assert.deepEqual(one(t, "Write tests with Mocha, similar to Jest.\n\nUse Mocha.\n"), []);
 });
+
+// Found in review.
+test("a rule that is turned twice says what it says: never omit, don't skip, don't forget", (t) => {
+  assert.deepEqual(one(t, "Always use semicolons.\n\nNever omit semicolons in new files.\n"), []);
+  assert.deepEqual(one(t, "Use trailing commas.\n\nDon't forget trailing commas.\n"), []);
+  assert.deepEqual(one(t, "Use trailing commas.\n\nDon't skip trailing commas.\n"), []);
+  assert.equal(one(t, "Use semicolons.\n\nOmit semicolons.\n").length, 1);
+  assert.equal(one(t, "Use semicolons.\n\nNever use semicolons.\n").length, 1);
+});
+
+test("managers listed as alternatives are not a contradiction", (t) => {
+  assert.deepEqual(one(t, "Install with `npm install`, `yarn add` or `pnpm add`.\n"), []);
+  assert.deepEqual(one(t, "```sh\n# npm\nnpm install\n# yarn\nyarn install\n# pnpm\npnpm install\n```\n"), []);
+  assert.equal(one(t, "```sh\nnpm install\n```\n\n```sh\nyarn install\n```\n").length, 1, "two blocks are two claims");
+});
+
+test("a cd on its own line in a block puts the commands after it in that folder", (t) => {
+  assert.deepEqual(one(t, "```sh\ncd packages/a\nnpm install\n```\n\nUse `pnpm install` at the root.\n"), []);
+});

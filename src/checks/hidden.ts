@@ -11,6 +11,7 @@ const MAX_TAG_FINDINGS = 10;
 const BULK_ZERO_WIDTH = 8;
 
 const FLAG_EMOJI_BASE = 0x1f3f4; // a black flag followed by tag letters is the flag of England, Scotland or Wales
+const FLAGS = new Set(["gbeng", "gbsct", "gbwls"]);
 
 interface Group {
   count: number;
@@ -77,7 +78,9 @@ function invisibleIn(doc: Doc): Finding[] {
           run += String.fromCodePoint(c);
           j += 2;
         }
-        if (prev === FLAG_EMOJI_BASE) {
+        // Only those three, ended with the cancel tag. Anything else after a black flag is text, and is reported.
+        const ended = run.endsWith(String.fromCodePoint(0xe007f));
+        if (prev === FLAG_EMOJI_BASE && ended && FLAGS.has(decodeTags(run))) {
           prev = 0xe007f;
           i = j;
           continue;
