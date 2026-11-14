@@ -57,7 +57,7 @@ test("line length, quotes, semicolons, trailing commas and the module system", (
     ],
     ["Always use semicolons.\n\nNo semicolons.\n", "semicolons", /leave out semicolons/],
     [
-      "Never use semicolons.\n\nEnd every statement with a semicolon, so use semicolons.\n",
+      "Never use semicolons.\n\nUse semicolons at the end of every statement.\n",
       "semicolons",
       /end statements with semicolons/,
     ],
@@ -169,4 +169,36 @@ test("the check never throws on odd text", (t) => {
   assert.deepEqual(one(t, ""), []);
   assert.deepEqual(one(t, "# Only a heading\n"), []);
   assert.deepEqual(one(t, "use ".repeat(2000) + "tabs\n"), []);
+});
+
+// Each of these was a false positive on a real repository (VS Code's own instruction files), and is a test now.
+test("a sentence that describes is not a rule", (t) => {
+  assert.deepEqual(
+    one(
+      t,
+      "bundle.ts holds the shared ESM options for the entries.\n\nStandalone CommonJS preloads do not use the banner.\n",
+    ),
+    [],
+  );
+  assert.deepEqual(one(t, "Tests use Mocha with the assert module.\n\nThe old suite ran on Jest.\n"), []);
+});
+
+test("a rule for one use of a thing is not a rule against another", (t) => {
+  assert.deepEqual(
+    one(t, '- `"double quotes"` for user-visible strings\n- Use single quotes for everything else.\n'),
+    [],
+  );
+  assert.deepEqual(
+    one(t, "Use double quotes for strings that are shown to the user.\n\nUse single quotes for all other strings.\n"),
+    [],
+  );
+  assert.deepEqual(one(t, "Use single quotes.\n\nUse double quotes for user-facing text.\n"), []);
+  // "for indentation" and "for all code" do not narrow a rule.
+  assert.equal(one(t, "Use tabs for indentation.\n\nUse 2 spaces for all code.\n").length, 1);
+});
+
+test("a tool named as a comparison is not the tool chosen", (t) => {
+  assert.deepEqual(one(t, "Use assertSnapshot for Jest-like snapshot tests.\n\nWrite tests with Mocha.\n"), []);
+  assert.deepEqual(one(t, "Write tests with Mocha.\n\nUse snapshots like Jest does.\n"), []);
+  assert.deepEqual(one(t, "Write tests with Mocha, similar to Jest.\n\nUse Mocha.\n"), []);
 });

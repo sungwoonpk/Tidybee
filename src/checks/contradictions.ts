@@ -23,6 +23,8 @@ interface Topic {
   conflicts?(a: string, b: string): boolean;
   /** A statement with "unless asked" in it is still a plain statement about this topic. */
   allowsAsking?: boolean;
+  /** A sentence that only says what is ("Tests run with Vitest") counts, since for this topic that is how a rule is often written. */
+  facts?: boolean;
   /**
    * What keeps two statements apart. By default the language or the part of the project a statement names, and the folder.
    * "places" is for a topic that is about the whole repository, such as the package manager: only a folder keeps those apart.
@@ -34,13 +36,33 @@ interface Topic {
 
 /** Words that turn the next few words around: "not npm", "never use tabs", "instead of jest", "pnpm over npm". */
 const TURNS =
-  /\b(?:no|not|never|don'?t|do not|dont|avoid|without|stop using|skip|drop|omit|instead of|rather than|over)\s+(?:[\w-]+\s+){0,2}$/;
+  /\b(?:no|not|never|don'?t|do not|dont|avoid|without|stop using|skip|drop|omit|instead of|rather than|over|like|unlike|similar to|such as|as in|compared (?:to|with))\s+(?:[\w-]+\s+){0,2}$/;
+
 /** Words that make a statement conditional, and so possibly an exception. */
 const CONDITION =
   /\b(?:except|unless|but|however|otherwise|apart from|only when|only if|when|whenever|if|while|although|though)\b/;
 /** "Unless I ask" and the like. It is the usual way to say "do not do this by yourself", and not an exception to anything. */
 const ASKING =
   /\b(?:unless|until|without|before|except)\b[^.]{0,30}\b(?:ask(?:ed|ing)?|told|tell|request(?:ed)?|instruct(?:ed)?|permission|approval|confirm(?:ation|ed)?|explicit(?:ly)?)\b/g;
+
+/** A statement that tells the agent what to do, and does not only say what is: it starts with an instruction or has a "must" in it. */
+const INSTRUCTION_START =
+  /^(?:(?:please|always|never|also|then)\s+)*(?:use|using|prefer|avoid|keep|write|format|indent|follow|ensure|commit|push|ask|add|run|test|stick|go|install|make|do not|don'?t|no|only)\b/;
+const MODAL = /\b(?:must|should|shall|always|never|required?|do not|don'?t|dont|avoid|prefer)\b/;
+
+function isInstruction(text: string): boolean {
+  // "In Python, indent with 4 spaces": what comes after the opening phrase is the instruction.
+  const body = text.replace(/^(?:in|for|on|within|inside|when working (?:on|in|with)) [^,]{1,40},\s*/, "");
+  return INSTRUCTION_START.test(body) || MODAL.test(text);
+}
+
+/** "Use X for Y" and "X for everything else" give a rule for part of the work. "for indentation" and "for all code" do not narrow it. */
+const FOR_A_PART =
+  /\bfor (?!(?:indentation|indenting|indent|formatting|style|styling|code|strings?|string literals|lines?|files?|all|every|each|any|this|the (?:project|repo|repository|codebase)|consistency|readability|everything(?! else))\b)/;
+/** A statement about what used to be so. It says nothing about what to do now. */
+const HISTORY =
+  /\b(?:old|older|previous(?:ly)?|formerly|used to|migrat(?:ed|ion|ing)|replaced|deprecated|removed|no longer|ran|was|were|had)\b/;
+const THE_REST = /\b(?:everything else|all other|the rest|otherwise|other (?:files|code|strings|cases))\b/;
 
 function plain(text: string): string {
   return text.toLowerCase().replace(/[`*_]/g, "").replace(/\s+/g, " ").trim();
@@ -140,6 +162,7 @@ const TOPICS: Topic[] = [
   },
   {
     id: "line-length",
+    facts: true,
     name: "line length",
     side(text) {
       if (NOT_LINES.test(text) || !/\b(?:lines?|width|columns?)\b/.test(text)) return null;
@@ -180,40 +203,43 @@ const TOPICS: Topic[] = [
   },
   {
     id: "javascript-test-runner",
+    facts: true,
     scope: "places",
     name: "the test runner",
     side: (text) =>
       choice(text, [
-        ["Jest", /\bjest\b/],
-        ["Vitest", /\bvitest\b/],
-        ["Mocha", /\bmocha\b/],
-        ["Ava", /\bava\b/],
-        ["Jasmine", /\bjasmine\b/],
+        ["Jest", /\bjest\b(?!-)/],
+        ["Vitest", /\bvitest\b(?!-)/],
+        ["Mocha", /\bmocha\b(?!-)/],
+        ["Ava", /\bava\b(?!-)/],
+        ["Jasmine", /\bjasmine\b(?!-)/],
       ]),
     asks: (s) => `test with ${s}`,
   },
   {
     id: "python-test-runner",
+    facts: true,
     scope: "places",
     name: "the test runner",
     side: (text) =>
       choice(text, [
-        ["pytest", /\bpytest\b/],
-        ["unittest", /\bunittest\b/],
-        ["nose", /\bnose2?\b/],
+        ["pytest", /\bpytest\b(?!-)/],
+        ["unittest", /\bunittest\b(?!-)/],
+        ["nose", /\bnose2?\b(?!-)/],
       ]),
     asks: (s) => `test with ${s}`,
   },
   {
     id: "formatter",
+    facts: true,
     scope: "places",
     name: "the formatter",
     side: (text) =>
       /\bformat/.test(text)
         ? choice(text, [
-            ["Prettier", /\bprettier\b/],
-            ["Biome", /\bbiome\b/],
-            ["dprint", /\bdprint\b/],
+            ["Prettier", /\bprettier\b(?!-)/],
+            ["Biome", /\bbiome\b(?!-)/],
+            ["dprint", /\bdprint\b(?!-)/],
           ])
         : null,
     asks: (s) => `format with ${s}`,
@@ -342,9 +368,12 @@ function statementClaims(doc: Doc, out: Claim[]): void {
     const text = plain(s.text);
     const heading = plain(headingAbove(doc, s.line) ?? "");
     const stripped = text.replace(ASKING, " ");
-    if (CONDITION.test(stripped)) continue;
+    if (CONDITION.test(stripped) || FOR_A_PART.test(stripped) || THE_REST.test(stripped) || HISTORY.test(text))
+      continue;
+    const instruction = isInstruction(text);
     const scope = scopeOf([text, heading]);
     for (const topic of TOPICS) {
+      if (!instruction && !topic.facts) continue;
       const side = topic.side(topic.allowsAsking ? text : stripped);
       if (side !== null) out.push({ topic, side, doc, line: s.line, scope });
     }
@@ -359,7 +388,14 @@ function managerClaims(doc: Doc, ctx: Context, out: Claim[]): void {
   };
   for (const s of doc.md.statements) {
     const text = plain(s.text);
-    if (!ABOUT_PACKAGES.test(text) || CONDITION.test(text)) continue;
+    if (
+      !ABOUT_PACKAGES.test(text) ||
+      !isInstruction(text) ||
+      CONDITION.test(text) ||
+      FOR_A_PART.test(text) ||
+      HISTORY.test(text)
+    )
+      continue;
     const side = choice(text, USE_MANAGERS);
     if (side) push(side, s.line, scopeOf([text, plain(headingAbove(doc, s.line) ?? "")]));
   }
