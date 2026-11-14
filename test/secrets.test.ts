@@ -48,7 +48,7 @@ test("a key is found in a code block, in the header and in an HTML comment, and 
 
 test("placeholders, examples and the alphabet are not keys", (t) => {
   const text = [
-    `AKIAIOSFODNN7EXAMPLE`,
+    `AKIA${"IOSFODNN7"}EXAMPLE`, // the example key from the AWS documentation, written in parts like every other
     `ghp_${"x".repeat(36)}`,
     `sk-${"1234567890abcdefghijklmnopqrstuvwxyz"}1234`,
     `sk-your-api-key-goes-here-and-it-is-long-enough`,
